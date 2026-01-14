@@ -1,0 +1,495 @@
+/* ================= Monitoring Agent Styles ================= */
+
+/* Container */
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 80px 2rem 2rem;
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+  color: #FFFFFF;
+  min-height: 100vh;
+  position: relative;
+  font-family: 'Inter', sans-serif;
+}
+
+.container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="waves" patternUnits="userSpaceOnUse" width="20" height="20"><path d="M0 10 Q5 0 10 10 Q15 20 20 10" fill="none" stroke="rgba(59, 130, 246, 0.1)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23waves)"/></svg>') repeat;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.5;
+}
+
+/* ================= Navigation ================= */
+.nav {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  padding: 1.2rem 0;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.4);
+}
+
+.navContent {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navBrand {
+  display: flex;
+  align-items: center;
+  font-size: 1.6rem;
+  font-weight: bold;
+  color: #3B82F6;
+  animation: pulse 2s infinite;
+}
+
+.navBrand span:first-child {
+  margin-right: 0.6rem;
+  font-size: 2.2rem;
+  animation: rotate 4s linear infinite;
+}
+
+.navLink {
+  background: linear-gradient(45deg, #3B82F6, #60A5FA);
+  color: #FFFFFF;
+  padding: 0.6rem 1.2rem;
+  text-decoration: none;
+  border-radius: 30px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  font-weight: 600;
+}
+
+.navLink::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s;
+}
+
+.navLink:hover::before {
+  left: 100%;
+}
+
+.navLink:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(59, 130, 246, 0.4);
+}
+
+/* ================= Hero ================= */
+.hero {
+  text-align: center;
+  padding: 4rem 2rem;
+  margin-bottom: 3rem;
+  position: relative;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 30px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.heroTitle {
+  font-size: 2.8rem;
+  margin-bottom: 1.2rem;
+  background: linear-gradient(45deg, #3B82F6, #60A5FA);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: titleGlow 2s ease-in-out infinite alternate;
+  font-weight: 700;
+}
+
+.heroText {
+  font-size: 1.2rem;
+  opacity: 0.85;
+  max-width: 800px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* ================= Section ================= */
+.section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 25px;
+  padding: 3rem;
+  margin-bottom: 3rem;
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s ease;
+}
+
+.section::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, #3B82F6, #60A5FA, #3B82F6);
+  border-radius: 25px;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  filter: blur(5px);
+}
+
+.section:hover::before {
+  opacity: 0.4;
+}
+
+.section:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 15px 50px rgba(59, 130, 246, 0.3);
+}
+
+.sectionTitle {
+  color: #3B82F6;
+  margin-bottom: 2rem;
+  font-size: 1.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.sectionSubtitle {
+  color: #60A5FA;
+  margin: 2rem 0 1rem;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+/* ================= Stats ================= */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.statsItem {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 15px;
+  padding: 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+  font-size: 1rem;
+}
+
+.statsItem:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: translateY(-3px);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* ================= Forms ================= */
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.formLabel {
+  margin-bottom: 1rem;
+  font-weight: 500;
+  color: #E2E8F0;
+  font-size: 1.1rem;
+}
+
+.formInput,
+.formSelect {
+  width: 100%;
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 15px;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.formInput:focus,
+.formSelect:focus {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.formButton {
+  background: linear-gradient(45deg, #3B82F6, #60A5FA);
+  color: #0F172A;
+  padding: 1.3rem 3.5rem;
+  border: none;
+  border-radius: 50px;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+  margin: 2.5rem auto 0;
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+
+.formButton:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 35px rgba(59, 130, 246, 0.5);
+}
+
+/* ================= Results ================= */
+.resultsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.resultsMetric {
+  text-align: center;
+  padding: 1.8rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.resultsMetric:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: translateY(-4px);
+}
+
+.resultsMetricValue {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 0.8rem;
+  color: #3B82F6;
+}
+
+.resultsMetricLabel {
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+/* ================= Additional Parameters ================= */
+.paramsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.paramItem {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 15px;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.paramItem:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: translateY(-3px);
+}
+
+.paramLabel {
+  font-size: 1rem;
+  opacity: 0.8;
+  margin-bottom: 0.5rem;
+}
+
+.paramValue {
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+
+.waterGauge {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.waterGaugeFill {
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+/* Risk Colors */
+.lowRisk {
+  color: #10B981 !important;
+}
+
+.moderateRisk {
+  color: #F59E0B !important;
+}
+
+.highRisk {
+  color: #EF4444 !important;
+}
+
+/* ================= Chart ================= */
+.chart {
+  width: 100%;
+  height: 350px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 4px 15px rgba(0, 0, 0, 0.4);
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+/* ================= History ================= */
+.historyContainer {
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 1rem;
+}
+
+.historyItem {
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 15px;
+  border-left: 5px solid;
+  transition: all 0.3s ease;
+}
+
+.historyItem:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: translateX(8px);
+}
+
+.historyItem.highRisk {
+  border-left-color: #EF4444;
+}
+
+.historyItem.moderateRisk {
+  border-left-color: #F59E0B;
+}
+
+.historyItem.lowRisk {
+  border-left-color: #10B981;
+}
+
+.historyHeader {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+.historyDetails {
+  font-size: 0.95rem;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+/* ================= Extra Tweaks ================= */
+.resultsIcon {
+  font-size: 4rem;
+  margin-bottom: 1.2rem;
+  animation: bounce 1s infinite;
+}
+
+.resultsText {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+.resultsRisk {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+/* ================= Animations ================= */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes titleGlow {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(1.3) drop-shadow(0 0 25px rgba(59, 130, 246, 0.4));
+  }
+}
+
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-15px);
+  }
+  60% {
+    transform: translateY(-8px);
+  }
+}
+
+/* ================= Responsive ================= */
+@media (max-width: 768px) {
+  .container {
+    padding: 70px 1.5rem 1.5rem;
+  }
+
+  .heroTitle {
+    font-size: 2.2rem;
+  }
+
+  .formGrid,
+  .resultsGrid,
+  .paramsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .navContent {
+    flex-direction: column;
+    gap: 1.2rem;
+    padding: 0 1.5rem;
+  }
+
+  .section {
+    padding: 2rem;
+  }
+
+  .chart {
+    height: 280px;
+  }
+}
