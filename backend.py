@@ -39,8 +39,7 @@ import random
 import uvicorn
 import logging
 import json
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+# TensorFlow imports removed to save memory (unused)
 import joblib  # For model persistence
 from typing import Optional, List
 
@@ -391,7 +390,7 @@ FLOOD_SCALER_PATH = os.path.join(MODEL_DIR, 'flood_scaler.pkl')
 flood_model = None
 flood_scaler = None
 recovery_model = None
-cnn_model = None
+
 
 # Region population densities (approximate values in people per sq km)
 region_density = {
@@ -460,29 +459,39 @@ def train_recovery_model():
         logger.error(f"Error training recovery model: {str(e)}")
         raise
 
-def train_cnn_model():
-    global cnn_model
-    try:
-        cnn_model = Sequential([
-            Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
-            MaxPooling2D((2, 2)), Conv2D(64, (3, 3), activation='relu'),
-            MaxPooling2D((2, 2)), Flatten(), Dense(128, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        cnn_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-        logger.info("CNN model initialized and 'trained' with dummy data")
-    except Exception as e:
-        logger.error(f"Error training CNN model: {str(e)}")
-        raise
+# CNN model removed (unused)
 
 # Startup event to ensure models are loaded
 @app.on_event("startup")
 def startup_event():
-    global flood_model, flood_scaler, recovery_model, cnn_model
+    global flood_model, flood_scaler, recovery_model
     logger.info("Starting up and loading models...")
     load_or_train_flood_model()
     train_recovery_model()
-    train_cnn_model()
+    # train_cnn_model() removed
+
+
+# Impact Prediction
+def predict_impact(data: ImpactInput):
+    global recovery_model
+    if recovery_model is None:
+        train_recovery_model()
+        if recovery_model is None:
+            raise HTTPException(status_code=500, detail="Recovery model not initialized")
+    try:
+        severity_map = {"low": 1, "moderate": 2, "high": 3, "critical": 4}
+        severity_value = severity_map.get(data.severity, 2)  # Default to moderate if invalid
+        input_data = np.array([[data.flood_probability, severity_value, data.population_density]])
+        prediction = recovery_model.predict(input_data)[0]
+        return {
+            "displaced_people": int(prediction[0]),
+            "recovery_cost": int(prediction[1]),
+            "required_resources": int(prediction[2])
+        }
+    except Exception as e:
+        logger.error(f"Impact prediction error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Impact prediction error: {str(e)}")
+
 
 # Initialize Database and Models
 def init_db():
@@ -1250,27 +1259,6 @@ async def recovery_dashboard(db: Session = Depends(get_db)):
 @app.get("/api/recovery")
 async def get_recovery(db: Session = Depends(get_db)):
     return await recovery_dashboard(db)
-
-# Impact Prediction
-def predict_impact(data: ImpactInput):
-    global recovery_model
-    if recovery_model is None:
-        train_recovery_model()
-        if recovery_model is None:
-            raise HTTPException(status_code=500, detail="Recovery model not initialized")
-    try:
-        severity_map = {"low": 1, "moderate": 2, "high": 3, "critical": 4}
-        severity_value = severity_map.get(data.severity, 2)  # Default to moderate if invalid
-        input_data = np.array([[data.flood_probability, severity_value, data.population_density]])
-        prediction = recovery_model.predict(input_data)[0]
-        return {
-            "displaced_people": int(prediction[0]),
-            "recovery_cost": int(prediction[1]),
-            "required_resources": int(prediction[2])
-        }
-    except Exception as e:
-        logger.error(f"Impact prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Impact prediction error: {str(e)}")
 
 # Risk Assessment
 @app.get("/api/risk-assessment")
