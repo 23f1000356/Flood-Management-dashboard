@@ -64,6 +64,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def read_root():
+    return {"message": "Flood Management API is running", "docs_url": "/docs"}
+
 sio = socketio.AsyncServer(async_mode='asgi')
 app.mount("/ws", socketio.ASGIApp(sio))
 
