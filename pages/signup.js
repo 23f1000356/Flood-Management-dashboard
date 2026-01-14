@@ -5,6 +5,7 @@ import Link from 'next/link';
 import styles from './signup.module.css';
 import navStyles from './index.module.css';
 import { useRouter } from 'next/navigation';
+import API_URL from '../utils/config';
 
 /**
  * Signup component for user registration
@@ -45,7 +46,7 @@ const Signup = () => {
 
     let responseStatus = null;
     try {
-      const response = await fetch('http://localhost:8000/api/signup', {
+      const response = await fetch(`${API_URL}/api/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, username, phone, email, password, gender }),
@@ -96,11 +97,11 @@ const Signup = () => {
             <li className={navStyles.navItem}>
               <Link href="/" className={`${navStyles.navLink} ${navStyles.loginBtn}`}>Home</Link>
             </li>
-           
+
             <li className={navStyles.navItem}>
               <Link href="/login" className={`${navStyles.navLink} ${navStyles.loginBtn}`}>Login</Link>
             </li>
-           
+
           </ul>
           <div className={`${navStyles.hamburger} ${isMenuOpen ? navStyles.active : ''}`} onClick={toggleMenu}>
             <span className={navStyles.bar}></span>

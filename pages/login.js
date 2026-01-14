@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createElement } from "react";
 import styles from "./login.module.css";
 import navStyles from "./index.module.css";
+import API_URL from "../utils/config";
 
 /**
  * Login component for user authentication
@@ -45,8 +46,8 @@ const Login = () => {
     try {
       const loginData = { username, password, role };
       console.log("Sending login data:", loginData);
-      
-      const response = await fetch("http://localhost:8000/api/login", {
+
+      const response = await fetch(`${API_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(loginData),
