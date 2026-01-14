@@ -529,7 +529,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$index$2e$js__$5b$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/react/index.js [client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$chartjs$2d$2$2f$dist$2f$index$2e$js__$5b$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/react-chartjs-2/dist/index.js [client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$chart$2e$js$2f$dist$2f$chart$2e$js__$5b$client$5d$__$28$ecmascript$29$__$3c$locals$3e$__ = __turbopack_context__.i("[project]/node_modules/chart.js/dist/chart.js [client] (ecmascript) <locals>");
-var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/react-toastify/dist/index.mjs [client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/node_modules/react-toastify/dist/react-toastify.esm.mjs [client] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$pages$2f$disaster$2d$prediction$2d$agent$2e$module$2e$css__$5b$client$5d$__$28$css__module$29$__ = __turbopack_context__.i("[project]/pages/disaster-prediction-agent.module.css [client] (css module)");
 ;
 var _s = __turbopack_context__.k.signature();
@@ -579,7 +579,7 @@ function DisasterPredictionAgent() {
                 features: Array.isArray(stats.features) ? stats.features : []
             });
         } catch (error) {
-            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Error loading model stats: ' + error.message);
+            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Error loading model stats: ' + error.message);
             setModelStats({
                 model_type: 'N/A',
                 accuracy: 0,
@@ -605,7 +605,7 @@ function DisasterPredictionAgent() {
             const { data } = await response.json();
             setHistory(data);
         } catch (error) {
-            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Error loading prediction history: ' + error.message);
+            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Error loading prediction history: ' + error.message);
         } finally{
             setLoading((prev)=>({
                     ...prev,
@@ -615,7 +615,7 @@ function DisasterPredictionAgent() {
     };
     const handlePredict = async ()=>{
         if (formData.mar_may_rainfall < 0 || formData.mar_may_rainfall > 1000 || formData.june_10days_rainfall < 0 || formData.june_10days_rainfall > 500 || formData.may_june_increase < 0 || formData.may_june_increase > 1000) {
-            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Please enter valid rainfall values: March-May (0-1000mm), June 10-day (0-500mm), May-June Increase (0-1000mm)');
+            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Please enter valid rainfall values: March-May (0-1000mm), June 10-day (0-500mm), May-June Increase (0-1000mm)');
             return;
         }
         setLoading((prev)=>({
@@ -634,9 +634,9 @@ function DisasterPredictionAgent() {
             const result = await response.json();
             setPrediction(result);
             loadPredictionHistory();
-            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].success('Prediction completed successfully');
+            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].success('Prediction completed successfully');
         } catch (error) {
-            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Error making prediction: ' + error.message);
+            __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["toast"].error('Error making prediction: ' + error.message);
         } finally{
             setLoading((prev)=>({
                     ...prev,
@@ -742,7 +742,7 @@ function DisasterPredictionAgent() {
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
         className: __TURBOPACK__imported__module__$5b$project$5d2f$pages$2f$disaster$2d$prediction$2d$agent$2e$module$2e$css__$5b$client$5d$__$28$css__module$29$__["default"].container,
         children: [
-            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$index$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["ToastContainer"], {
+            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$react$2d$toastify$2f$dist$2f$react$2d$toastify$2e$esm$2e$mjs__$5b$client$5d$__$28$ecmascript$29$__["ToastContainer"], {
                 position: "top-right",
                 autoClose: 3000,
                 theme: "dark"

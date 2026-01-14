@@ -8,10 +8,12 @@ __turbopack_load_page_chunks__("/admin", [
   "static/chunks/node_modules_next_dist_client_becf32a6._.js",
   "static/chunks/node_modules_next_dist_ad956061._.js",
   "static/chunks/node_modules_next_router_47d9bb1c.js",
-  "static/chunks/node_modules_react-dom_82bb97c6._.js",
+  "static/chunks/node_modules_react_1cad9b0b._.js",
+  "static/chunks/node_modules_react-dom_cjs_react-dom_development_ab7e073c.js",
+  "static/chunks/node_modules_react-dom_f14d0471._.js",
   "static/chunks/node_modules_chart_js_dist_aaf06973._.js",
-  "static/chunks/node_modules_dc24e4d5._.js",
+  "static/chunks/node_modules_4e95cc34._.js",
   "static/chunks/pages_adminDashboard_module_1e9d6bcb.css",
   "static/chunks/pages_admin_5771e187._.js",
-  "static/chunks/pages_admin_f76fedb0._.js"
+  "static/chunks/pages_admin_5d5267e3._.js"
 ])

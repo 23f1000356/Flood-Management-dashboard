@@ -12,12 +12,14 @@
       "static/chunks/node_modules_next_dist_client_5b177182._.js",
       "static/chunks/node_modules_next_dist_3622563f._.js",
       "static/chunks/node_modules_next_navigation_66d41c2a.js",
-      "static/chunks/node_modules_react-dom_82bb97c6._.js",
-      "static/chunks/node_modules_f2979c3a._.js",
+      "static/chunks/node_modules_react_b2385d85._.js",
+      "static/chunks/node_modules_react-dom_cjs_react-dom_development_ab7e073c.js",
+      "static/chunks/node_modules_react-dom_f14d0471._.js",
+      "static/chunks/node_modules_1f7f5084._.js",
       "static/chunks/[root-of-the-server]__b46251b6._.js",
       "static/chunks/pages_f38a07ac._.css",
       "static/chunks/pages_login_5771e187._.js",
-      "static/chunks/pages_login_f06271c8._.js"
+      "static/chunks/pages_login_3b28e763._.js"
     ]
   },
   "ampFirstPages": []

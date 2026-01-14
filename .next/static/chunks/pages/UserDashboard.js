@@ -6,9 +6,11 @@ __turbopack_load_page_chunks__("/UserDashboard", [
   "static/chunks/node_modules_next_dist_client_5b177182._.js",
   "static/chunks/node_modules_next_dist_3622563f._.js",
   "static/chunks/node_modules_next_navigation_66d41c2a.js",
-  "static/chunks/node_modules_react-dom_82bb97c6._.js",
-  "static/chunks/node_modules_4b1c9c5e._.js",
+  "static/chunks/node_modules_react_1cad9b0b._.js",
+  "static/chunks/node_modules_react-dom_cjs_react-dom_development_ab7e073c.js",
+  "static/chunks/node_modules_react-dom_f14d0471._.js",
+  "static/chunks/node_modules_e984746f._.js",
   "static/chunks/pages_56fe8699._.css",
   "static/chunks/pages_UserDashboard_5771e187._.js",
-  "static/chunks/pages_UserDashboard_06945731._.js"
+  "static/chunks/pages_UserDashboard_43612a5e._.js"
 ])

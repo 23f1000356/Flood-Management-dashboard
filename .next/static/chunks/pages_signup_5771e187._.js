@@ -7,8 +7,10 @@
   "static/chunks/node_modules_next_dist_client_fbb59832._.js",
   "static/chunks/node_modules_next_dist_3622563f._.js",
   "static/chunks/node_modules_next_ba9b7647._.js",
-  "static/chunks/node_modules_react-dom_82bb97c6._.js",
-  "static/chunks/node_modules_a80c7711._.js",
+  "static/chunks/node_modules_react_1cad9b0b._.js",
+  "static/chunks/node_modules_react-dom_cjs_react-dom_development_ab7e073c.js",
+  "static/chunks/node_modules_react-dom_f14d0471._.js",
+  "static/chunks/node_modules_1f7f5084._.js",
   "static/chunks/[root-of-the-server]__735b3b41._.js",
   "static/chunks/pages_54ede82a._.css"
 ],
