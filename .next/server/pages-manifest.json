@@ -1,0 +1,10 @@
+{
+  "/": "pages/index.js",
+  "/UserDashboard": "pages/UserDashboard.js",
+  "/_app": "pages/_app.js",
+  "/_document": "pages/_document.js",
+  "/admin": "pages/admin.js",
+  "/disaster-prediction-agent": "pages/disaster-prediction-agent.js",
+  "/login": "pages/login.js",
+  "/signup": "pages/signup.js"
+}
