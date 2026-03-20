@@ -4,20 +4,6 @@ An intelligent, AI-powered platform for real-time flood monitoring, prediction, 
 
 ---
 
-## 📋 Table of Contents
-
-- [Problem Statement](#problem-statement)
-- [Solution](#solution)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Workflow](#workflow)
-- [How to Run](#how-to-run)
-- [Project Structure](#project-structure)
-- [Challenges](#challenges)
-- [Screenshots](#screenshots)
-
----
-
 ## 🌍 Problem Statement
 
 Floods are among the most devastating natural disasters, causing significant loss of life, property damage, and economic disruption worldwide. Traditional flood management systems face several challenges:
