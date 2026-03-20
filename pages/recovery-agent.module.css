@@ -1,0 +1,281 @@
+/* ================= Recovery Support Agent Styles ================= */
+
+/* Container */
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 80px 2rem 2rem;
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+  color: #FFFFFF;
+  min-height: 100vh;
+  position: relative;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="waves" patternUnits="userSpaceOnUse" width="20" height="20"><path d="M0 10 Q5 0 10 10 Q15 20 20 10" fill="none" stroke="rgba(56,189,248,0.1)" stroke-width="1"/></pattern></defs><rect width="100" height="100" fill="url(%23waves)"/></svg>') repeat;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.5;
+}
+
+/* ================= Navigation ================= */
+.nav {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  padding: 1.2rem 0;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.4);
+}
+
+.navContent {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navBrand {
+  display: flex;
+  align-items: center;
+  font-size: 1.6rem;
+  font-weight: bold;
+  color: #38BDF8;
+  animation: pulse 2s infinite;
+}
+
+.navBrand span:first-child {
+  margin-right: 0.6rem;
+  font-size: 2.2rem;
+  animation: rotate 4s linear infinite;
+}
+
+.navLink {
+  background: linear-gradient(45deg, #38BDF8, #60A5FA);
+  color: #FFFFFF;
+  padding: 0.6rem 1.2rem;
+  text-decoration: none;
+  border-radius: 30px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  font-weight: 600;
+}
+
+.navLink::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: left 0.5s;
+}
+
+.navLink:hover::before {
+  left: 100%;
+}
+
+.navLink:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 30px rgba(56, 189, 248, 0.4);
+}
+
+/* ================= Hero ================= */
+.hero {
+  text-align: center;
+  padding: 4rem 2rem;
+  margin-bottom: 3rem;
+  position: relative;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 30px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.heroTitle {
+  font-size: 2.8rem;
+  margin-bottom: 1.2rem;
+  background: linear-gradient(45deg, #38BDF8, #60A5FA);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: titleGlow 2s ease-in-out infinite alternate;
+  font-weight: 700;
+}
+
+.heroText {
+  font-size: 1.2rem;
+  opacity: 0.85;
+  max-width: 800px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* ================= Section ================= */
+.section {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 25px;
+  padding: 3rem;
+  margin-bottom: 3rem;
+  backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s ease;
+}
+
+.section::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(45deg, #38BDF8, #60A5FA, #38BDF8);
+  border-radius: 25px;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  filter: blur(5px);
+}
+
+.section:hover::before {
+  opacity: 0.4;
+}
+
+.section:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 15px 50px rgba(56, 189, 248, 0.3);
+}
+
+.sectionTitle {
+  color: #38BDF8;
+  margin-bottom: 2rem;
+  font-size: 1.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+/* ================= History ================= */
+.historyContainer {
+  max-height: 450px;
+  overflow-y: auto;
+  padding-right: 1rem;
+}
+
+.historyItem {
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 15px;
+  border-left: 5px solid;
+  transition: all 0.3s ease;
+}
+
+.historyItem:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: translateX(8px);
+}
+
+.historyHeader {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 0.8rem;
+}
+
+.historyDetails {
+  font-size: 0.95rem;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+/* ================= Recovery List ================= */
+.recoveryList {
+  list-style-type: disc;
+  padding-left: 20px;
+  color: #E2E8F0;
+}
+
+.recoveryList li {
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
+}
+
+.recoveryList li:hover {
+  opacity: 1;
+}
+
+/* ================= Loading Spinner ================= */
+.loadingSpinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #38BDF8;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ================= Animations ================= */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes titleGlow {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(1.3) drop-shadow(0 0 25px rgba(56, 189, 248, 0.4));
+  }
+}
+
+/* ================= Responsive ================= */
+@media (max-width: 768px) {
+  .container {
+    padding: 70px 1.5rem 1.5rem;
+  }
+
+  .heroTitle {
+    font-size: 2.2rem;
+  }
+
+  .section {
+    padding: 2rem;
+  }
+}

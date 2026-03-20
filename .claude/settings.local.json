@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -lh \"c:/Users/royvi/Downloads/Flood-Management-dashboard-main \\(1\\)/Flood-Management-dashboard-main/models/\")",
+      "Bash(find \"c:/Users/royvi/Downloads/Flood-Management-dashboard-main \\(1\\)/Flood-Management-dashboard-main\" -maxdepth 1 -type f \\\\\\( -name \"*.md\" -o -name \".env*\" -o -name \"*.config.*\" \\\\\\))"
+    ]
+  }
+}
