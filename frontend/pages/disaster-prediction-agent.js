@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { ToastContainer, toast } from 'react-toastify';
+import { motion, AnimatePresence } from 'framer-motion';
 import 'react-toastify/dist/ReactToastify.css';
 import styles from './disaster-prediction-agent.module.css';
 
@@ -132,8 +133,8 @@ export default function DisasterPredictionAgent() {
           {
             label: 'Prediction Metrics',
             data: [prediction.probability * 100, prediction.confidence * 100],
-            backgroundColor: [getRiskColor(prediction.risk_level), '#00C4B4'],
-            borderColor: [getRiskColor(prediction.risk_level), '#00C4B4'],
+            backgroundColor: [getRiskColor(prediction.risk_level), '#10B981'],
+            borderColor: [getRiskColor(prediction.risk_level), '#10B981'],
             borderWidth: 1,
           },
         ],
@@ -186,12 +187,17 @@ export default function DisasterPredictionAgent() {
         </div>
       </nav>
 
-      <section className={styles.hero}>
+      <motion.section 
+        className={styles.hero}
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6 }}
+      >
         <h2 className={styles.heroTitle}>AI-Powered Flood Prediction System</h2>
         <p className={styles.heroText}>
           Predict flood likelihood using rainfall patterns based on historical data (1901-2015). Enhanced with water level estimates and other parameters.
         </p>
-      </section>
+      </motion.section>
 
       {loading.stats ? (
         <div className={styles.section}>
@@ -296,93 +302,116 @@ export default function DisasterPredictionAgent() {
         </button>
       </section>
 
-      {prediction && (
-        <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Prediction Results</h3>
-          <div className={styles.resultsGrid}>
-            <div style={{ textAlign: 'center' }}>
-              <div
-                className={`${styles.resultsIcon} ${styles[`${prediction.risk_level}Risk`]}`}
-              >
-                {prediction.prediction === 1 ? '⚠️' : '✅'}
-              </div>
-              <div className={styles.resultsText}>{prediction.interpretation}</div>
-              <div className={styles.resultsRisk}>
-                Risk Level:{' '}
-                <span className={styles[`${prediction.risk_level}Risk`]}>
-                  {prediction.risk_level.toUpperCase()}
-                </span>
-              </div>
-            </div>
-            <div>
-              {chartData && (
-                <div className={styles.chart}>
-                  <Bar data={chartData} options={chartOptions} />
+      <AnimatePresence>
+        {prediction && (
+          <motion.section 
+            className={styles.section}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h3 className={styles.sectionTitle}>Prediction Results</h3>
+            <div className={styles.resultsGrid}>
+              <div style={{ textAlign: 'center' }}>
+                <motion.div
+                  className={`${styles.resultsIcon} ${styles[`${prediction.risk_level}Risk`]}`}
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                >
+                  {prediction.prediction === 1 ? '⚠️' : '✅'}
+                </motion.div>
+                <div className={styles.resultsText}>{prediction.interpretation}</div>
+                <div className={styles.resultsRisk}>
+                  Risk Level:{' '}
+                  <span className={styles[`${prediction.risk_level}Risk`]}>
+                    {prediction.risk_level.toUpperCase()}
+                  </span>
                 </div>
-              )}
-            </div>
-          </div>
-          <div className={styles.resultsGrid}>
-            <div className={styles.resultsMetric}>
-              <div className={styles.resultsMetricValue}>
-                {(prediction.probability * 100).toFixed(1)}%
               </div>
-              <div className={styles.resultsMetricLabel}>Flood Probability</div>
-            </div>
-            <div className={styles.resultsMetric}>
-              <div className={styles.resultsMetricValue}>
-                {(prediction.confidence * 100).toFixed(1)}%
-              </div>
-              <div className={styles.resultsMetricLabel}>Model Confidence</div>
-            </div>
-          </div>
-          <h4 className={styles.sectionSubtitle}>Additional Flood Parameters</h4>
-          <div className={styles.paramsGrid}>
-            <div className={styles.paramItem}>
-              <label className={styles.paramLabel}>Estimated Water Level (m)</label>
-              <div className={styles.paramValue} style={{ color: getWaterColor(prediction.estimated_water_level) }}>
-                {prediction.estimated_water_level}
-              </div>
-              <div className={styles.waterGauge}>
-                <div 
-                  className={styles.waterGaugeFill} 
-                  style={{ 
-                    width: `${Math.min(prediction.estimated_water_level / 3 * 100, 100)}%`,
-                    backgroundColor: getWaterColor(prediction.estimated_water_level)
-                  }} 
-                />
+              <div>
+                {chartData && (
+                  <div className={styles.chart}>
+                    <Bar data={chartData} options={chartOptions} />
+                  </div>
+                )}
               </div>
             </div>
-            <div className={styles.paramItem}>
-              <label className={styles.paramLabel}>Current River Level (m)</label>
-              <div className={styles.paramValue} style={{ color: getWaterColor(prediction.current_river_level - 5) }}>
-                {prediction.current_river_level}
+            <div className={styles.resultsGrid}>
+              <motion.div 
+                className={styles.resultsMetric}
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <div className={styles.resultsMetricValue}>
+                  {(prediction.probability * 100).toFixed(1)}%
+                </div>
+                <div className={styles.resultsMetricLabel}>Flood Probability</div>
+              </motion.div>
+              <motion.div 
+                className={styles.resultsMetric}
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <div className={styles.resultsMetricValue}>
+                  {(prediction.confidence * 100).toFixed(1)}%
+                </div>
+                <div className={styles.resultsMetricLabel}>Model Confidence</div>
+              </motion.div>
+            </div>
+            <h4 className={styles.sectionSubtitle}>Additional Flood Parameters</h4>
+            <div className={styles.paramsGrid}>
+              <div className={styles.paramItem}>
+                <label className={styles.paramLabel}>Estimated Water Level (m)</label>
+                <div className={styles.paramValue} style={{ color: getWaterColor(prediction.estimated_water_level) }}>
+                  {prediction.estimated_water_level}
+                </div>
+                <div className={styles.waterGauge}>
+                  <motion.div 
+                    className={styles.waterGaugeFill} 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(prediction.estimated_water_level / 3 * 100, 100)}%` }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                    style={{ 
+                      backgroundColor: getWaterColor(prediction.estimated_water_level)
+                    }} 
+                  />
+                </div>
               </div>
-              <div className={styles.waterGauge}>
-                <div 
-                  className={styles.waterGaugeFill} 
-                  style={{ 
-                    width: `${Math.min((prediction.current_river_level - 5) / 2 * 100, 100)}%`,
-                    backgroundColor: getWaterColor(prediction.current_river_level - 5)
-                  }} 
-                />
+              <div className={styles.paramItem}>
+                <label className={styles.paramLabel}>Current River Level (m)</label>
+                <div className={styles.paramValue} style={{ color: getWaterColor(prediction.current_river_level - 5) }}>
+                  {prediction.current_river_level}
+                </div>
+                <div className={styles.waterGauge}>
+                  <motion.div 
+                    className={styles.waterGaugeFill} 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min((prediction.current_river_level - 5) / 2 * 100, 100)}%` }}
+                    transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
+                    style={{ 
+                      backgroundColor: getWaterColor(prediction.current_river_level - 5)
+                    }} 
+                  />
+                </div>
+              </div>
+              <div className={styles.paramItem}>
+                <label className={styles.paramLabel}>Evacuation Recommended</label>
+                <div className={styles.paramValue} style={{ color: prediction.evacuation_recommendation === 'Yes' ? '#f44336' : '#4caf50' }}>
+                  {prediction.evacuation_recommendation}
+                </div>
+              </div>
+              <div className={styles.paramItem}>
+                <label className={styles.paramLabel}>Estimated Affected Population</label>
+                <div className={styles.paramValue}>
+                  {prediction.affected_population_estimate.toLocaleString()}
+                </div>
               </div>
             </div>
-            <div className={styles.paramItem}>
-              <label className={styles.paramLabel}>Evacuation Recommended</label>
-              <div className={styles.paramValue} style={{ color: prediction.evacuation_recommendation === 'Yes' ? '#f44336' : '#4caf50' }}>
-                {prediction.evacuation_recommendation}
-              </div>
-            </div>
-            <div className={styles.paramItem}>
-              <label className={styles.paramLabel}>Estimated Affected Population</label>
-              <div className={styles.paramValue}>
-                {prediction.affected_population_estimate.toLocaleString()}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       {loading.history ? (
         <div className={styles.section}>

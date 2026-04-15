@@ -4,6 +4,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import styles from './resource-allocation.module.css';
 import io from 'socket.io-client';
 import { Bar } from 'react-chartjs-2';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -169,7 +170,7 @@ export default function ResourceAllocation() {
       {
         label: 'Priority Score',
         data: allocationData.map(d => d.priority),
-        backgroundColor: 'rgba(56, 189, 248, 0.8)',
+        backgroundColor: 'rgba(16, 185, 129, 0.8)',
       },
     ],
   };
@@ -192,12 +193,17 @@ export default function ResourceAllocation() {
         </div>
       </nav>
 
-      <section className={styles.hero}>
+      <motion.section 
+        className={styles.hero}
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8 }}
+      >
         <h1 className={styles.heroTitle}>Resource Allocation Dashboard</h1>
         <p className={styles.heroText}>
           Optimize resource distribution and manage flood-affected regions with real-time insights.
         </p>
-      </section>
+      </motion.section>
 
       <section className={styles.allocationControls}>
         <h2 className={styles.sectionTitle}>Allocate Resources <span>📊</span></h2>
@@ -239,8 +245,16 @@ export default function ResourceAllocation() {
           <section className={styles.allocationOverview}>
             <h2 className={styles.sectionTitle}>Resource Allocation Overview <span>🌍</span></h2>
             <div className={styles.grid}>
-              {allocationData.map((data) => (
-                <div key={data.region} className={styles.card}>
+              {allocationData.map((data, i) => (
+                <motion.div 
+                  key={data.region} 
+                  className={styles.card}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.1 }}
+                  whileHover={{ y: -5, boxShadow: "0 10px 30px rgba(16, 185, 129, 0.2)" }}
+                >
                   <h3 className={styles.cardTitle}>{data.region}</h3>
                   <p><strong>Severity:</strong> <span className={styles[data.severity]}>{data.severity.toUpperCase()}</span></p>
                   <p><strong>Displaced People:</strong> {data.displacedPeople.toLocaleString()}</p>
@@ -263,7 +277,7 @@ export default function ResourceAllocation() {
                       Plan Evacuation
                     </button>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </section>

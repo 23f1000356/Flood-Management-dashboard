@@ -1,8 +1,10 @@
-import { useRouter } from 'next/router'; // Replace useNavigate with useRouter
+import { useRouter } from 'next/router'; 
 import React, { useState, useEffect } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend, LineElement, PointElement } from 'chart.js';
 import { Bar, Pie, Doughnut, Line } from 'react-chartjs-2';
+import { motion, AnimatePresence } from 'framer-motion';
 import styles from './adminDashboard.module.css';
+import API_URL from '../utils/config';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend, LineElement, PointElement);
 
@@ -50,6 +52,137 @@ const AdminDashboard = () => {
   const [volunteerRequests, setVolunteerRequests] = useState([]);
   const [damageReports, setDamageReports] = useState([]);
   const [financialAidRequests, setFinancialAidRequests] = useState([]);
+
+  // SMS Alert State
+  const [smsMessage, setSmsMessage] = useState('⚠️ FLOOD ALERT: High risk detected in your area. Please move to higher ground immediately. Stay safe. - ACMS');
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState(null);
+  const [smsPhonePreview, setSmsPhonePreview] = useState(null);
+  const [smsTestNumber, setSmsTestNumber] = useState('');
+
+  const sendSMSAlert = async (customMessage) => {
+    const msg = customMessage || smsMessage;
+    if (!msg.trim()) { showNotification('Please enter an alert message', 'warning'); return; }
+    setSmsSending(true);
+    setSmsResult(null);
+    try {
+      const res = await fetch(`${API_URL}/api/send-sms-alert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, ...(smsTestNumber.trim() ? { test_number: smsTestNumber.trim() } : {}) })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to send SMS');
+      setSmsResult({ success: data.success, message: data.message, recipients: data.recipients });
+      showNotification(`SMS sent to ${data.recipients} user(s)!`, 'success');
+    } catch (err) {
+      setSmsResult({ success: false, message: err.message });
+      showNotification(`SMS failed: ${err.message}`, 'error');
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  const fetchSmsPhonePreview = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/api/users/phones');
+      const data = await res.json();
+      setSmsPhonePreview(data);
+    } catch (e) { console.error('Phone preview error:', e); }
+  };
+
+
+  // NASA EONET Live Disaster Data
+  const [eonetEvents, setEonetEvents] = useState([]);
+  const [eonetLoading, setEonetLoading] = useState(false);
+  const [eonetError, setEonetError] = useState(null);
+  const [eonetCategory, setEonetCategory] = useState('All');
+  const [eonetLastFetched, setEonetLastFetched] = useState(null);
+
+  const EONET_CATEGORIES = ['All', 'Floods', 'Wildfires', 'Severe Storms', 'Landslides', 'Earthquakes', 'Volcanoes', 'Drought', 'Sea and Lake Ice', 'Snow', 'Dust and Haze'];
+
+  const fetchEonetEvents = async () => {
+    setEonetLoading(true);
+    setEonetError(null);
+    try {
+      const res = await fetch('https://eonet.gsfc.nasa.gov/api/v3/events?limit=100&status=open');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEonetEvents(Array.isArray(data.events) ? data.events : []);
+      setEonetLastFetched(new Date());
+    } catch (err) {
+      console.error('EONET fetch error:', err);
+      setEonetError('Failed to fetch NASA EONET data. Check network connection.');
+    } finally {
+      setEonetLoading(false);
+    }
+  };
+
+  const filteredEonetEvents = eonetCategory === 'All'
+    ? eonetEvents
+    : eonetEvents.filter(ev => ev.categories?.some(c => c.title === eonetCategory));
+
+  const eonetCounts = EONET_CATEGORIES.slice(1).reduce((acc, cat) => {
+    acc[cat] = eonetEvents.filter(ev => ev.categories?.some(c => c.title === cat)).length;
+    return acc;
+  }, {});
+
+  // Open-Meteo Weather & Flood Prediction
+  const FLOOD_CITIES = [
+    { name: 'Mumbai',    lat: 19.07, lon: 72.87 },
+    { name: 'Delhi',     lat: 28.61, lon: 77.23 },
+    { name: 'Kochi',     lat: 9.93,  lon: 76.26 },
+    { name: 'Chennai',   lat: 13.08, lon: 80.27 },
+    { name: 'Kolkata',   lat: 22.57, lon: 88.36 },
+    { name: 'Guwahati',  lat: 26.18, lon: 91.74 },
+  ];
+  const [weatherData, setWeatherData] = useState([]);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherLastFetched, setWeatherLastFetched] = useState(null);
+  const [weatherError, setWeatherError] = useState(null);
+
+  const getRiskLevel = (rain) => {
+    if (rain > 20) return { level: 'HIGH',     color: '#EF4444', bg: 'rgba(239,68,68,0.12)' };
+    if (rain > 10) return { level: 'MODERATE', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)' };
+    if (rain > 2)  return { level: 'LOW',      color: '#10B981', bg: 'rgba(16,185,129,0.12)' };
+    return         { level: 'MINIMAL',  color: '#3B82F6', bg: 'rgba(59,130,246,0.10)' };
+  };
+
+  const fetchOpenMeteo = async () => {
+    setWeatherLoading(true);
+    setWeatherError(null);
+    try {
+      const results = await Promise.all(
+        FLOOD_CITIES.map(async (city) => {
+          const [weather, flood] = await Promise.all([
+            fetch(
+              `https://api.open-meteo.com/v1/forecast?latitude=${city.lat}&longitude=${city.lon}` +
+              `&current=rain,temperature_2m,wind_speed_10m&hourly=rain&timezone=Asia%2FKolkata`
+            ).then(r => r.json()),
+            fetch(
+              `https://flood-api.open-meteo.com/v1/flood?latitude=${city.lat}&longitude=${city.lon}` +
+              `&daily=river_discharge&forecast_days=3`
+            ).then(r => r.json()).catch(() => null),
+          ]);
+          const rain      = weather.current?.rain ?? 0;
+          const temp      = weather.current?.temperature_2m ?? null;
+          const wind      = weather.current?.wind_speed_10m ?? null;
+          const discharge = flood?.daily?.river_discharge?.[0] ?? null;
+          const hourlyRain = weather.hourly?.rain ?? [];
+          const rain24h   = hourlyRain.slice(0, 24).reduce((s, v) => s + (v || 0), 0);
+          return { ...city, rain, temp, wind, discharge, rain24h, risk: getRiskLevel(rain24h), fetched: new Date() };
+        })
+      );
+      setWeatherData(results);
+      setWeatherLastFetched(new Date());
+    } catch (err) {
+      console.error('Open-Meteo fetch error:', err);
+      setWeatherError('Failed to fetch Open-Meteo data.');
+    } finally {
+      setWeatherLoading(false);
+    }
+  };
+
   const localMockFloods = [
     { 
       id: -1, 
@@ -109,6 +242,8 @@ const AdminDashboard = () => {
         fetchVolunteerRequests();
         fetchDamageReports();
         fetchFinancialAid();
+        fetchEonetEvents();
+        fetchOpenMeteo();
       } catch (error) {
         console.error('Error checking user role:', error);
         showNotification('Failed to verify user role', 'error');
@@ -466,7 +601,7 @@ const AdminDashboard = () => {
         predictions: '47',
         uptime: '99.8%',
         load: '34%',
-        redirectTo: '/disaster-prediction-agent'
+        redirectTo: 'disasters'
       },
       {
         name: 'Monitoring Agent',
@@ -581,6 +716,8 @@ const AdminDashboard = () => {
       showNotification('Failed to reject request', 'error');
     }
   };
+
+
 
   const fetchCommunityReports = async () => {
     try {
@@ -1057,10 +1194,25 @@ const AdminDashboard = () => {
               <span className={styles.menuText}>Recovery Reports</span>
             </a>
           </div>
+
           <div className={styles.menuItem}>
             <a href="#" className={`${styles.menuLink} ${currentSection === 'analytics' ? styles.active : ''}`} onClick={() => showSection('analytics')}>
               <span className={styles.menuIcon}>📈</span>
               <span className={styles.menuText}>Analytics</span>
+            </a>
+          </div>
+          <div className={styles.menuItem}>
+            <a href="#" className={`${styles.menuLink} ${currentSection === 'eonet' ? styles.active : ''}`} onClick={() => { showSection('eonet'); fetchEonetEvents(); }}>
+              <span className={styles.menuIcon}>🛸</span>
+              <span className={styles.menuText}>Live Disasters (NASA)</span>
+              {eonetEvents.length > 0 && <span className={`${styles.menuBadge}`} style={{background:'#EF4444'}}>{eonetEvents.length}</span>}
+            </a>
+          </div>
+          <div className={styles.menuItem}>
+            <a href="#" className={`${styles.menuLink} ${currentSection === 'weather-flood' ? styles.active : ''}`} onClick={() => { showSection('weather-flood'); if (weatherData.length === 0) fetchOpenMeteo(); }}>
+              <span className={styles.menuIcon}>🌧️</span>
+              <span className={styles.menuText}>Weather & Flood Risk</span>
+              {weatherData.some(c => c.risk?.level === 'HIGH') && <span className={`${styles.menuBadge}`} style={{background:'#F59E0B'}}>!</span>}
             </a>
           </div>
           <div className={styles.menuItem}>
@@ -1074,78 +1226,92 @@ const AdminDashboard = () => {
 
       <main className={`${styles.mainContent} ${sidebarOpen ? styles.active : ''}`}>
         <div id="dashboard" className={`${styles.contentSection} ${currentSection === 'dashboard' ? styles.active : ''}`}>
-          <div className={styles.dashboardHeader}>
-            <h1 className={styles.dashboardTitle}>System Overview</h1>
-            <button className={styles.refreshBtn} onClick={refreshData}>🔄 Refresh Data</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+            <div>
+              <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                📡 LIVE TELEMETRY
+              </span>
+              <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Operational<br/>Overview</h1>
+              <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Global surveillance and system performance metrics for the ACMS core infrastructure.</p>
+            </div>
+            <button className={styles.refreshBtn} onClick={refreshData} style={{ padding: '15px 30px', borderRadius: '40px', background: 'rgba(255,255,255,0.05)', color: '#FFF', fontWeight: 'bold' }}>
+              🔄 Synchronize Data
+            </button>
           </div>
 
           <div className={styles.dashboardGrid}>
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>System Status</h3>
-                <span className={styles.cardIcon}>⚡</span>
+            <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', letterSpacing: '2px', color: '#10B981' }}>SYSTEM STATUS</h3>
+                <span>⚡</span>
               </div>
-              <div className={styles.statusIndicator}>
-                <div className={`${styles.statusDot} ${styles.online}`}></div>
-                <span>{systemStatus ? 'All Services Operational' : 'Loading...'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '30px', padding: '15px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 10px #10B981' }}></div>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#10B981' }}>All Services Operational</span>
               </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Uptime</span>
-                <span className={styles.metricValue}>{systemStatus ? `${(systemStatus.uptime_seconds/3600).toFixed(1)}h` : '...'}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>CPU Usage</span>
-                <span className={styles.metricValue}>{systemStatus ? `${systemStatus.cpu_percent}%` : '...'}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Memory</span>
-                <span className={styles.metricValue}>{systemStatus ? `${systemStatus.memory_used_gb}GB / ${systemStatus.memory_total_gb}GB` : '...'}</span>
-              </div>
-            </div>
-
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Active Monitoring</h3>
-                <span className={styles.cardIcon}>📡</span>
-              </div>
-              <div className={styles.statusIndicator}>
-                <div className={`${styles.statusDot} ${styles.online}`}></div>
-                <span>Real-time Data Flow</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Satellites</span>
-                <span className={styles.metricValue}>{monitoringMetrics ? `${monitoringMetrics.satellites_active} Active` : '...'}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Weather Stations</span>
-                <span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.weather_stations : '...'}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Data Points/min</span>
-                <span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.datapoints_per_min : '...'}</span>
+              <div style={{ display: 'grid', gap: '20px' }}>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>UPTIME</span>
+                  <span className={styles.metricValue}>{systemStatus ? `${(systemStatus.uptime_seconds/3600).toFixed(1)}h` : '...'}</span>
+                </div>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>CORE LOAD</span>
+                  <span className={styles.metricValue}>{systemStatus ? `${systemStatus.cpu_percent}%` : '...'}</span>
+                </div>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>NEURAL MEMORY</span>
+                  <span className={styles.metricValue}>{systemStatus ? `${systemStatus.memory_used_gb}GB` : '...'}</span>
+                </div>
               </div>
             </div>
 
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Risk Assessment</h3>
-                <span className={styles.cardIcon}>⚠️</span>
+            <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', letterSpacing: '2px', color: '#10B981' }}>MONITORING</h3>
+                <span>📡</span>
               </div>
-              <div className={styles.statusIndicator}>
-                <div className={`${styles.statusDot} ${styles.warning}`}></div>
-                <span>Moderate Risk Detected</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '30px', padding: '15px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', border: '1px solid rgba(59, 130, 246, 0.1)' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3B82F6', boxShadow: '0 0 10px #3B82F6' }}></div>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#3B82F6' }}>Real-time Data Flow</span>
               </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>High Risk Areas</span>
-                <span className={styles.metricValue}>3</span>
+              <div style={{ display: 'grid', gap: '20px' }}>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>SATELLITES</span>
+                  <span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.satellites_active : '...'}</span>
+                </div>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>STATIONS</span>
+                  <span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.weather_stations : '...'}</span>
+                </div>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>TELEMETRY/M</span>
+                  <span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.datapoints_per_min : '...'}</span>
+                </div>
               </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Active Predictions</span>
-                <span className={styles.metricValue}>47</span>
+            </div>
+
+            <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', letterSpacing: '2px', color: '#10B981' }}>RISK VECTOR</h3>
+                <span>⚠️</span>
               </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Accuracy</span>
-                <span className={styles.metricValue}>94.2%</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '30px', padding: '15px', background: 'rgba(245, 158, 11, 0.05)', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.1)' }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B', boxShadow: '0 0 10px #F59E0B' }}></div>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#F59E0B' }}>Moderate Threat Level</span>
+              </div>
+              <div style={{ display: 'grid', gap: '20px' }}>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>HIGH RISK</span>
+                  <span className={styles.metricValue}>3 SECTORS</span>
+                </div>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>PREDICTIONS</span>
+                  <span className={styles.metricValue}>47 LIVE</span>
+                </div>
+                <div className={styles.metric}>
+                  <span className={styles.metricLabel}>ACCURACY</span>
+                  <span className={styles.metricValue}>94.2%</span>
+                </div>
               </div>
             </div>
 
@@ -1173,139 +1339,125 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          <div className={styles.card}>
+        </div>
+
+        {/* ─── NASA EONET Live Disaster Panel (visible on dashboard too) ─── */}
+        {currentSection === 'dashboard' && eonetEvents.length > 0 && (
+          <div className={styles.card} style={{ marginTop: '30px', background: 'rgba(10,15,30,0.6)', border: '1px solid rgba(239,68,68,0.25)' }}>
             <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Live System Alerts</h3>
-              <span className={styles.cardIcon}>🔔</span>
+              <h3 className={styles.cardTitle} style={{ color: '#EF4444' }}>🛸 NASA EONET — Live Global Disasters</h3>
+              <span style={{ fontSize: '12px', color: '#64748B' }}>
+                {eonetLastFetched ? `Updated ${eonetLastFetched.toLocaleTimeString()}` : 'Loading...'}
+              </span>
             </div>
-            <div className={styles.alertsContainer} id="alertsContainer">
-              {alerts.map((alert, index) => (
-                <div key={index} className={`${styles.alert} ${styles[alert.type]}`} style={alert.type === 'error' ? { backgroundColor: '#dc2626', borderLeft: '4px solid #991b1b', color: 'white' } : {}}>
-                  <div className={styles.alertIcon}>{alert.icon}</div>
-                  <div className={styles.alertContent}>
-                    <div className={styles.alertTitle} style={alert.type === 'error' ? { color: '#fca5a5', fontWeight: 'bold', fontSize: '16px' } : {}}>{alert.title}</div>
-                    <div className={styles.alertMessage} style={alert.type === 'error' ? { color: 'white' } : {}}>{alert.message}</div>
-                    <div className={styles.alertTime} style={alert.type === 'error' ? { color: '#fecaca' } : {}}>{alert.time}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              {['Floods','Wildfires','Severe Storms','Earthquakes','Volcanoes'].map(cat => (
+                <div key={cat} style={{ textAlign: 'center', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '22px', fontWeight: '900', color: cat==='Floods'?'#3B82F6':cat==='Wildfires'?'#F97316':cat==='Severe Storms'?'#A78BFA':cat==='Earthquakes'?'#EF4444':'#F59E0B' }}>
+                    {eonetCounts[cat] || 0}
                   </div>
-                  {alert.alert_id && (
-                    <button 
-                      onClick={() => resolveAlert(alert.alert_id)}
-                      style={{
-                        marginLeft: 'auto',
-                        padding: '8px 16px',
-                        backgroundColor: '#10b981',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseOver={(e) => e.target.style.backgroundColor = '#059669'}
-                      onMouseOut={(e) => e.target.style.backgroundColor = '#10b981'}
-                    >
-                      Resolve
-                    </button>
-                  )}
+                  <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '4px', fontWeight: '700', letterSpacing: '0.5px' }}>{cat.toUpperCase()}</div>
                 </div>
               ))}
             </div>
+            <div className={styles.alertsContainer} style={{ maxHeight: '260px' }}>
+              {eonetEvents.slice(0, 6).map((ev, i) => {
+                const cat = ev.categories?.[0]?.title || 'Unknown';
+                const coords = ev.geometry?.[ev.geometry.length - 1]?.coordinates;
+                const date = ev.geometry?.[ev.geometry.length - 1]?.date;
+                const color = cat==='Floods'?'#3B82F6':cat==='Wildfires'?'#F97316':cat==='Severe Storms'?'#A78BFA':cat==='Earthquakes'?'#EF4444':cat==='Volcanoes'?'#F59E0B':'#10B981';
+                return (
+                  <div key={ev.id || i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0 }}></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600' }}>{ev.title}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>{cat} {coords ? `· ${coords[1]?.toFixed(2)}°N, ${coords[0]?.toFixed(2)}°E` : ''} {date ? `· ${new Date(date).toLocaleDateString()}` : ''}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={() => showSection('eonet')} style={{ marginTop: '15px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#EF4444', padding: '8px 20px', borderRadius: '20px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>View All {eonetEvents.length} Events →</button>
           </div>
-        </div>
+        )}
 
-        <div id="agents" className={`${styles.contentSection} ${currentSection === 'agents' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>AI Agent Status</h2>
-          <div className={styles.agentsGrid} id="agentsGrid">
-            {agents.map((agent, index) => {
-              const statusClass = agent.status.includes('Active') ? 'online' :
-                                agent.status.includes('Warning') ? 'warning' : 'offline';
-              return (
-                <div key={index} className={`${styles.agentCard} ${styles.clickable}`} onClick={() => handleAgentClick(agent)}>
-                  <div className={styles.agentHeader}>
-                    <div className={styles.agentIcon}>{agent.icon}</div>
-                    <div className={styles.agentInfo}>
-                      <h3>{agent.name}</h3>
-                      <div className={styles.agentStatus}>
-                        <div className={styles.statusIndicator}>
-                          <div className={`${styles.statusDot} ${styles[statusClass]}`}></div>
-                          <span>{agent.status}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className={styles.agentMetrics}>
-                    <div className={styles.miniMetric}>
-                      <div className={styles.miniMetricValue}>{agent.accuracy}</div>
-                      <div className={styles.miniMetricLabel}>Accuracy</div>
-                    </div>
-                    <div className={styles.miniMetric}>
-                      <div className={styles.miniMetricValue}>{agent.predictions || agent.detections || agent.allocations || agent.routes || agent.plans || agent.scenarios}</div>
-                      <div className={styles.miniMetricLabel}>Active</div>
-                    </div>
-                    <div className={styles.miniMetric}>
-                      <div className={styles.miniMetricValue}>{agent.uptime}</div>
-                      <div className={styles.miniMetricLabel}>Uptime</div>
-                    </div>
-                    <div className={styles.miniMetric}>
-                      <div className={styles.miniMetricValue}>{agent.load}</div>
-                      <div className={styles.miniMetricLabel}>Load</div>
-                    </div>
-                  </div>
-                  <div className={styles.progressBar}>
-                    <div className={styles.progressFill} style={{ width: agent.load }}></div>
-                  </div>
+    <div id="agents" className={`${styles.contentSection} ${currentSection === 'agents' ? styles.active : ''}`}>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              🤖 AUTONOMOUS AGENTS
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>Agent<br/>Registry</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px', marginTop: '15px' }}>Configure and monitor specialized AI agents responsible for disaster prediction, resource handling, and recovery.</p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '25px' }}>
+            {[{name: 'Disaster Prediction', section: '/disaster-prediction-agent'}, {name: 'Real-time Monitor', section: '/monitoring-agent'}, {name: 'Resource Allocation', section: '/resource'}, {name: 'Recovery Support', section: '/recovery'}, {name: 'Shelter Management', section: 'evacuation'}, {name: 'Civilian Alert', section: 'issues'}].map((agent, i) => (
+              <div key={i} className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                   <div style={{ width: '50px', height: '50px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>🤖</div>
+                   <div style={{ padding: '4px 12px', borderRadius: '40px', background: 'rgba(16, 185, 129, 0.14)', color: '#10B981', fontSize: '11px', fontWeight: '900', letterSpacing: '1px' }}>ACTIVE</div>
                 </div>
-              );
-            })}
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '22px' }}>{agent.name}</h3>
+                <p style={{ color: '#94A3B8', fontSize: '14px', marginBottom: '25px', lineHeight: '1.5' }}>Specialized logic for {agent.name.toLowerCase()} operations with integrated ML feedback loops.</p>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button className={styles.refreshBtn} style={{ flex: 1, fontSize: '12px' }} onClick={() => agent.section.startsWith('/') ? window.location.href = agent.section : showSection(agent.section)}>CONFIG</button>
+                  <button className={styles.refreshBtn} style={{ flex: 1, fontSize: '12px', background: 'rgba(255,255,255,0.05)' }}>LOGS</button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
         <div id="disasters" className={`${styles.contentSection} ${currentSection === 'disasters' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>Active Floods</h2>
-          <div className={styles.card}>
-            <h3 style={{fontSize:'20px',fontWeight:'bold',marginBottom:'20px'}}>Floods by Region</h3>
-            {!Array.isArray(floods) || floods.length === 0 ? <p>No active floods</p> : (
-              <div>
-                {Array.isArray(floods) && floods.map(f => (
-                  <div key={f.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:'1px solid rgba(255,255,255,0.1)'}}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+             <div>
+                <span style={{ color: '#EF4444', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                  ⚠️ THREAT ANALYSIS
+                </span>
+                <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>Active<br/>Disasters</h1>
+                <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px', marginTop: '15px' }}>Current active flood events and high-risk predictions requiring immediate tactical coordination.</p>
+             </div>
+
+          </div>
+
+          <div style={{marginTop:'20px'}}>
+            {floods.length === 0 ? (
+              <div className={styles.card} style={{textAlign:'center',padding:'80px',backgroundColor:'rgba(21, 26, 35, 0.4)'}}>
+                <div style={{fontSize:'48px',marginBottom:'20px'}}>🛡️</div>
+                <h3 style={{fontSize:'24px',marginBottom:'10px'}}>No Active Threats</h3>
+                <p style={{color:'#94A3B8'}}>The global situational map is currently clear. Monitoring continues.</p>
+              </div>
+            ) : (
+              <div style={{display:'grid',gap:'20px'}}>
+                {floods.map((f) => (
+                  <motion.div 
+                    key={f.id} 
+                    className={styles.card} 
+                    style={{ 
+                      backgroundColor:'rgba(21, 26, 35, 0.4)', 
+                      borderLeft: `5px solid ${f.severity === 'high' ? '#EF4444' : (f.severity === 'moderate' ? '#F59E0B' : '#10B981')}`,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '30px'
+                    }}
+                  >
                     <div>
-                      <div style={{fontWeight:600,fontSize:'18px',marginBottom:'8px'}}>{f.name}</div>
-                      <div className={`${styles[`severity${f.severity.charAt(0).toUpperCase() + f.severity.slice(1)}`] || styles.severityModerate}`} style={{marginBottom:'8px'}}>
-                        {f.severity}
+                      <div style={{display:'flex',alignItems:'center',gap:'15px',marginBottom:'10px'}}>
+                        <h3 style={{margin:0,fontSize:'24px'}}>{f.name}</h3>
+                        <span style={{padding:'4px 12px',background:f.severity === 'high' ? 'rgba(239, 68, 68, 0.14)' : 'rgba(245, 158, 11, 0.14)', color:f.severity === 'high' ? '#EF4444' : '#F59E0B', borderRadius:'40px', fontSize:'11px', fontWeight:'900'}}>{f.severity.toUpperCase()}</span>
                       </div>
-                      <div style={{opacity:0.8,fontSize:'12px'}}>Region: {f.region} • Status: {f.status} • Accuracy: {f.prediction_accuracy ?? 'N/A'}%</div>
-                      <div style={{marginTop:'8px',display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:'8px'}}>
-                        <div className={styles.miniMetric} style={{textAlign:'left'}}>
-                          <div className={styles.miniMetricLabel}>Rainfall (24h)</div>
-                          <div className={styles.miniMetricValue}>{floodDetails[f.id]?.rainfall ?? '…'} mm</div>
-                        </div>
-                        <div className={styles.miniMetric} style={{textAlign:'left'}}>
-                          <div className={styles.miniMetricLabel}>Water Level</div>
-                          <div className={styles.miniMetricValue}>{floodDetails[f.id]?.waterLevel ?? '…'} m</div>
-                        </div>
-                        <div className={styles.miniMetric} style={{textAlign:'left'}}>
-                          <div className={styles.miniMetricLabel}>Affected Population</div>
-                          <div className={styles.miniMetricValue}>{floodDetails[f.id]?.populationAffected?.toLocaleString?.() ?? '…'}</div>
-                        </div>
-                        <div className={styles.miniMetric} style={{textAlign:'left'}}>
-                          <div className={styles.miniMetricLabel}>Shelters Open</div>
-                          <div className={styles.miniMetricValue}>{floodDetails[f.id]?.sheltersOpen ?? '…'}</div>
-                        </div>
+                      <div style={{color:'#94A3B8',fontSize:'14px',display:'flex',gap:'20px'}}>
+                        <span>📍 {f.region}</span>
+                        <span>⏱️ {new Date(f.start_time).toLocaleTimeString()}</span>
+                        <span>📊 ID: {String(f.id).slice(0,8)}</span>
                       </div>
-                      <div style={{marginTop:'8px',opacity:0.85,fontSize:'12px'}}>
-                        Resources → Boats: {floodDetails[f.id]?.resources?.boats ?? '…'}, Food Packs: {floodDetails[f.id]?.resources?.foodPacks ?? '…'}, Water (L): {floodDetails[f.id]?.resources?.waterLiters ?? '…'}, Med Kits: {floodDetails[f.id]?.resources?.medKits ?? '…'}
-                      </div>
-                      <div style={{marginTop:'6px',opacity:0.75,fontSize:'12px'}}>Districts: {(floodDetails[f.id]?.districts || []).join(', ')}</div>
-                      <div style={{marginTop:'4px',opacity:0.65,fontSize:'12px'}}>Risk Bucket: {floodDetails[f.id]?.riskBucket || '…'} • Updated: {floodDetails[f.id]?.lastUpdated ? new Date(floodDetails[f.id].lastUpdated).toLocaleString() : '…'}</div>
                     </div>
-                    <div style={{display:'flex',gap:'8px'}}>
-                      <button className={styles.refreshBtn} onClick={() => setSelectedFlood(f)}>View/Edit</button>
-                      {f.status !== 'approved' && <button className={styles.refreshBtn} onClick={() => approveFlood(f.id)}>Approve</button>}
-                      {f.status !== 'resolved' && <button className={styles.refreshBtn} onClick={() => resolveFlood(f.id)}>Resolve</button>}
-                      <button className={styles.refreshBtn} onClick={() => deleteFlood(f.id)}>Delete</button>
+                    <div style={{display:'flex',gap:'15px'}}>
+                      <button className={styles.refreshBtn} onClick={() => setSelectedFlood(f)} style={{background:'rgba(255,255,255,0.05)'}}>ANALYSIS</button>
+                      <button className={styles.refreshBtn} onClick={() => approveFlood(f.id)}>APPROVE</button>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -1352,37 +1504,65 @@ const AdminDashboard = () => {
         </div>
 
         <div id="monitoring" className={`${styles.contentSection} ${currentSection === 'monitoring' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>Real-time Monitoring</h2>
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Satellite Feeds</h3>
-              <span className={styles.cardIcon}>🛰️</span>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              🛰️ ORBITAL SURVEILLANCE
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Real-time<br/>Monitoring</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Direct satellite uplink and weather station telemetry integration for immediate impact assessment.</p>
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+              <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '800' }}>Satellite Feeds</h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 15px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '20px', color: '#10B981', fontSize: '11px', fontWeight: '900' }}>
+                 UPLINK ACTIVE ({monitoringMetrics?.satellites_active || 0})
+              </div>
             </div>
-            <div className={styles.metric}><span className={styles.metricLabel}>Active Feeds</span><span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.satellites_active : '...'}</span></div>
-            <div style={{display:'flex',gap:'10px',margin:'10px 0'}}>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Switched to backup satellite feed', 'success')}>Switch to Backup</button>
-              <button className={styles.refreshBtn} onClick={() => createIssue('Satellite feed offline', 'Region: Unspecified; Feed: GOES-16; Auto-raised by monitoring')}>Raise Support Ticket</button>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+              <div className={styles.metric}>
+                <span className={styles.metricLabel}>PRIMARY SIGNAL</span>
+                <span className={styles.metricValue} style={{ color: '#10B981' }}>STRONG</span>
+              </div>
+              <div className={styles.metric}>
+                <span className={styles.metricLabel}>LATENCY</span>
+                <span className={styles.metricValue}>12ms</span>
+              </div>
             </div>
-            <div className={styles.formGroup}>
-              <label>Upload Satellite Image</label>
-              <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isAnalyzing} />
-              {isAnalyzing && <div style={{color:'#00ff88',marginTop:'5px'}}>🔄 Analyzing image...</div>}
+
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '40px' }}>
+              <button className={styles.refreshBtn} onClick={() => showNotification('Switched to backup satellite feed', 'success')} style={{ flex: 1 }}>CYCLE FEED</button>
+              <button className={styles.refreshBtn} onClick={() => createIssue('Satellite feed offline', '...')} style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }}>REPORT SIGNAL LOSS</button>
+            </div>
+
+            <div style={{ border: '2px dashed rgba(255,255,255,0.1)', borderRadius: '24px', padding: '60px', textAlign: 'center' }}>
+               <div style={{ fontSize: '48px', marginBottom: '20px' }}>📁</div>
+               <h4 style={{ margin: '0 0 10px 0', fontSize: '20px' }}>Satellite Image Analysis</h4>
+               <p style={{ color: '#94A3B8', fontSize: '14px', marginBottom: '30px' }}>Upload multi-spectral imagery for automated flood detection and impact mapping.</p>
+               <input type="file" id="sat-upload" hidden accept="image/*" onChange={handleImageUpload} disabled={isAnalyzing} />
+               <button className={styles.refreshBtn} onClick={() => document.getElementById('sat-upload').click()} style={{ background: '#10B981', color: '#000', fontWeight: '800', width: '250px' }}>
+                 {isAnalyzing ? 'ANALYZING...' : 'SELECT IMAGE'}
+               </button>
             </div>
             
             {uploadedImage && (
-              <div style={{marginTop:'20px'}}>
-                <h4>Uploaded Satellite Image</h4>
-                <div style={{textAlign:'center',marginBottom:'20px'}}>
-                  <img src={uploadedImage} alt="Uploaded satellite image" style={{
-                    maxWidth:'100%',
-                    maxHeight:'400px',
-                    border:'2px solid rgba(0,255,136,0.3)',
-                    borderRadius:'8px',
-                    boxShadow:'0 4px 15px rgba(0,255,136,0.2)'
-              }} />
-            </div>
+              <div style={{ marginTop: '40px' }}>
+                <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '20px' }}>RAW FEED ANALYSIS</h4>
+                <div style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <img src={uploadedImage} alt="Satellite Feed" style={{ width: '100%', display: 'block' }} />
+                  {isAnalyzing && (
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(5px)' }}>
+                       <div style={{ textAlign: 'center' }}>
+                         <div style={{ width: '40px', height: '40px', border: '3px solid #10B981', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 15px' }}></div>
+                         <div style={{ color: '#10B981', fontWeight: '800', letterSpacing: '2px', fontSize: '12px' }}>PROCESSING NEURAL ENGINE...</div>
+                       </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+          </div>
             
             {imageAnalysis && (
               <div style={{marginTop:'20px'}}>
@@ -1458,110 +1638,110 @@ const AdminDashboard = () => {
                   )}
                 </div>
                 <div style={{background:'rgba(255,255,255,0.05)',height:'200px',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px'}}>
-                  <span style={{color:'#666'}}>After Image (Historical)</span>
                 </div>
               </div>
             </div>
-          </div>
 
+          {/* ── Email Alert Management ── */}
           <div className={styles.card}>
             <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Weather Station Data</h3>
-              <span className={styles.cardIcon}>🌦️</span>
+              <h3 className={styles.cardTitle}>Alert Management</h3>
+              <span className={styles.cardIcon}>📧</span>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))',gap:'16px'}}>
-              <div>
-                <h4>Rainfall (mm/hr)</h4>
-                <Line data={{
-                  labels: Array.from({length: 12}, (_, i) => `${i*5}m`),
-                  datasets: [{ label: 'Rainfall', data: rainfallSeries, borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.2)' }]
-                }} options={{ responsive:true, plugins:{legend:{display:false}} }} />
+            <p style={{fontSize:'13px',color:'#64748B',marginBottom:'16px'}}>Click <strong>Send Alert</strong> to email all registered users about the flood risk in that region.</p>
+            {recentPredictions && recentPredictions.length > 0 ? (
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:'12px'}}>
+                {recentPredictions.map((p, idx) => {
+                  const risk = p.flood_probability > 0.7 ? 'HIGH' : p.flood_probability > 0.4 ? 'MODERATE' : 'LOW';
+                  const color = risk === 'HIGH' ? '#EF4444' : risk === 'MODERATE' ? '#F59E0B' : '#10B981';
+                  const sendEmailAlert = async () => {
+                    try {
+                      const res = await fetch('http://localhost:8000/api/alerts/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          title: `${risk} RISK - ${p.region}`,
+                          message: `Flood probability ${(p.flood_probability*100).toFixed(0)}% | Confidence ${(p.confidence*100).toFixed(0)}%`,
+                          risk
+                        })
+                      });
+                      if (!res.ok) throw new Error('Failed');
+                      showNotification(`Email alert sent for ${p.region}`, risk === 'HIGH' ? 'error' : risk === 'MODERATE' ? 'warning' : 'success');
+                    } catch (e) {
+                      showNotification('Failed to send email alert', 'error');
+                    }
+                  };
+                  return (
+                    <div key={idx} style={{border:`1px solid ${color}44`,padding:'16px',borderRadius:'12px',background:`${color}08`}}>
+                      <div style={{fontWeight:700,color,fontSize:'16px',marginBottom:'4px'}}>{p.region} • {risk}</div>
+                      <div style={{fontSize:'12px',color:'#94A3B8',marginBottom:'12px'}}>Prob: {(p.flood_probability*100).toFixed(0)}% · Conf: {(p.confidence*100).toFixed(0)}%</div>
+                      <button
+                        className={styles.refreshBtn}
+                        onClick={sendEmailAlert}
+                        style={{width:'100%',padding:'10px',fontWeight:'700',background:'#10B981',color:'#000',borderRadius:'8px',border:'none',cursor:'pointer'}}
+                      >
+                        📧 Send Alert
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
-              <div>
-                <h4>River Water Level (m)</h4>
-                <Line data={{
-                  labels: Array.from({length: 12}, (_, i) => `${i*5}m`),
-                  datasets: [{ label: 'Water Level', data: waterLevelSeries, borderColor: '#00ff88', backgroundColor: 'rgba(0,255,136,0.2)' }]
-                }} options={{ responsive:true, plugins:{legend:{display:false}} }} />
-              </div>
-              <div>
-                <h4>Temperature (°C)</h4>
-                <Line data={{
-                  labels: Array.from({length: 12}, (_, i) => `${i*5}m`),
-                  datasets: [{ label: 'Temperature', data: temperatureSeries, borderColor: '#ffa726', backgroundColor: 'rgba(255,167,38,0.2)' }]
-                }} options={{ responsive:true, plugins:{legend:{display:false}} }} />
-              </div>
-            </div>
-            <div className={styles.metric}>
-              <span className={styles.metricLabel}>Stations Reporting</span>
-              <span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.weather_stations : '...'}</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px',marginTop:'10px'}}>
-              <div className={styles.formGroup}><label>Rainfall Threshold (24h, mm)</label><input value={thresholds.rainfall} onChange={(e)=>handleThresholdChange('rainfall', e.target.value)} type="number" /></div>
-              <div className={styles.formGroup}><label>River Level Threshold (m)</label><input value={thresholds.river} onChange={(e)=>handleThresholdChange('river', e.target.value)} type="number" /></div>
-              <div className={styles.formGroup}><label>Humidity Threshold (%)</label><input value={thresholds.humidity} onChange={(e)=>handleThresholdChange('humidity', e.target.value)} type="number" /></div>
-              <div className={styles.formGroup}><label>Wind Speed Threshold (km/h)</label><input value={thresholds.wind} onChange={(e)=>handleThresholdChange('wind', e.target.value)} type="number" /></div>
-            </div>
-            <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Anomaly detection run complete', 'info')}>Detect Anomalies</button>
-              <button className={styles.refreshBtn} onClick={() => createIssue('Station reporting no data', 'Region: Unspecified; Station: WX-102; Auto-flagged')}>Flag Station</button>
-            </div>
+            ) : (
+              <div style={{opacity:0.7,fontSize:'13px'}}>No recent predictions yet.</div>
+            )}
           </div>
 
-          <div className={styles.card}>
+          {/* ── SMS Alert Management ── */}
+          <div className={styles.card} style={{marginTop:'20px',border:'1px solid rgba(245,158,11,0.25)'}}>
             <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Data Ingestion & Model Integration</h3>
-              <span className={styles.cardIcon}>🔗</span>
+              <h3 className={styles.cardTitle} style={{color:'#F59E0B'}}>SMS Alerts</h3>
+              <span className={styles.cardIcon}>📱</span>
             </div>
-            <div className={styles.metric}><span className={styles.metricLabel}>Data points/min</span><span className={styles.metricValue}>{monitoringMetrics ? monitoringMetrics.datapoints_per_min : '...'}</span></div>
-            <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
-              <button className={styles.refreshBtn} onClick={refreshData}>Manual Refresh</button>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Force sync triggered', 'info')}>Force Sync</button>
+            <p style={{fontSize:'13px',color:'#64748B',marginBottom:'12px'}}>Click <strong>Send SMS</strong> to instantly text all registered users about the flood risk in that region via Fast2SMS.</p>
+
+            {/* Test number override */}
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'16px',padding:'12px',borderRadius:'10px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)'}}>
+              <span style={{fontSize:'13px',color:'#F59E0B',fontWeight:'700',whiteSpace:'nowrap'}}>🧪 Test number:</span>
+              <input
+                type="tel"
+                value={smsTestNumber}
+                onChange={e => setSmsTestNumber(e.target.value)}
+                placeholder="Enter your mobile (e.g. 9876543210) — leave empty to send to all users"
+                style={{flex:1,padding:'8px 12px',borderRadius:'8px',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.1)',color:'#FFF',fontSize:'13px',outline:'none'}}
+              />
+              {smsTestNumber && <span style={{fontSize:'11px',color:'#94A3B8',whiteSpace:'nowrap'}}>→ sends only to this number</span>}
             </div>
-            <div style={{marginTop:'12px'}}>
-              <h4>Model Weighting (mock)</h4>
-              <div className={styles.formGroup}><label>River Level Weight</label><input type="range" min="0" max="1" step="0.05" value={weights.river} onChange={(e)=>setWeights(w=>({...w, river: Number(e.target.value)}))} /></div>
-              <div className={styles.formGroup}><label>Rainfall Weight</label><input type="range" min="0" max="1" step="0.05" value={weights.rainfall} onChange={(e)=>setWeights(w=>({...w, rainfall: Number(e.target.value)}))} /></div>
-              <div className={styles.formGroup}><label>Temperature Weight</label><input type="range" min="0" max="1" step="0.05" value={weights.temperature} onChange={(e)=>setWeights(w=>({...w, temperature: Number(e.target.value)}))} /></div>
-              <button className={styles.refreshBtn} onClick={runSimulation}>Run Simulation</button>
-            </div>
-            <div style={{marginTop:'12px'}}>
-              <h4>Alert Management (From Recent Predictions)</h4>
-              {recentPredictions && recentPredictions.length > 0 ? (
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:'10px'}}>
-                  {recentPredictions.map((p, idx) => {
-                    const risk = p.flood_probability > 0.7 ? 'high' : p.flood_probability > 0.4 ? 'moderate' : 'low';
-                    const color = risk === 'high' ? '#ff4d4f' : risk === 'moderate' ? '#3b82f6' : '#10b981';
-                    const sendAlertForPrediction = async () => {
-                      try {
-                        const res = await fetch('http://localhost:8000/api/alerts/send', {
-                          method: 'POST', headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            title: `${risk.toUpperCase()} RISK - ${p.region}`,
-                            message: `Flood probability ${(p.flood_probability*100).toFixed(0)}% | Confidence ${(p.confidence*100).toFixed(0)}%`,
-                            risk
-                          })
-                        });
-                        if (!res.ok) throw new Error('Failed');
-                        showNotification('Alert sent to users', risk === 'high' ? 'error' : risk === 'moderate' ? 'warning' : 'success');
-                      } catch (e) {
-                        console.error(e);
-                        showNotification('Failed to send alert', 'error');
-                      }
-                    };
-                    return (
-                      <div key={idx} style={{border:`1px solid ${color}55`,padding:'10px',borderRadius:'8px'}}>
-                        <div style={{fontWeight:600, color}}>{p.region} • {risk.toUpperCase()}</div>
-                        <div style={{fontSize:'12px',opacity:0.85}}>Prob: {(p.flood_probability*100).toFixed(0)}% • Conf: {(p.confidence*100).toFixed(0)}%</div>
-                        <button className={styles.refreshBtn} style={{marginTop:'8px'}} onClick={sendAlertForPrediction}>Send Alert</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{opacity:0.8}}>No recent predictions yet.</div>
-              )}
-            </div>
+            {recentPredictions && recentPredictions.length > 0 ? (
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))',gap:'12px'}}>
+                {recentPredictions.map((p, idx) => {
+                  const risk = p.flood_probability > 0.7 ? 'HIGH' : p.flood_probability > 0.4 ? 'MODERATE' : 'LOW';
+                  const color = risk === 'HIGH' ? '#EF4444' : risk === 'MODERATE' ? '#F59E0B' : '#10B981';
+                  const urgency = risk === 'HIGH' ? 'EMERGENCY' : risk === 'MODERATE' ? 'WARNING' : 'ADVISORY';
+                  const action = risk === 'HIGH'
+                    ? 'Evacuate immediately to the nearest shelter. Do not wait.'
+                    : risk === 'MODERATE'
+                    ? 'Stay alert. Avoid low-lying areas and river banks.'
+                    : 'Monitor conditions. Follow official instructions.';
+                  const smsMsg = `[ACMS ${urgency}] Flood Alert - ${p.region} Region. Risk Level: ${risk}. Flood Probability: ${(p.flood_probability*100).toFixed(0)}%. ${action} Helpline: 1077. - Disaster Management Authority`;
+                  return (
+                    <div key={idx} style={{border:`1px solid ${color}44`,padding:'16px',borderRadius:'12px',background:`${color}08`}}>
+                      <div style={{fontWeight:700,color,fontSize:'16px',marginBottom:'4px'}}>{p.region} • {risk}</div>
+                      <div style={{fontSize:'12px',color:'#94A3B8',marginBottom:'12px'}}>Prob: {(p.flood_probability*100).toFixed(0)}% · Conf: {(p.confidence*100).toFixed(0)}%</div>
+                      <button
+                        className={styles.refreshBtn}
+                        disabled={smsSending}
+                        onClick={() => sendSMSAlert(smsMsg)}
+                        style={{width:'100%',padding:'10px',fontWeight:'700',background: smsSending ? 'rgba(245,158,11,0.2)' : '#F59E0B',color:'#000',borderRadius:'8px',border:'none',cursor: smsSending ? 'not-allowed' : 'pointer'}}
+                      >
+                        {smsSending ? '⏳ Sending...' : '📱 Send SMS'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{opacity:0.7,fontSize:'13px'}}>No recent predictions yet.</div>
+            )}
           </div>
         </div>
 
@@ -1641,34 +1821,57 @@ const AdminDashboard = () => {
 
           <div className={styles.card}>
             <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Distribution & Assignment</h3>
-              <span className={styles.cardIcon}>🎯</span>
+              <h3 className={styles.cardTitle}>Pending Resource Requests</h3>
+              <span className={styles.cardIcon}>📩</span>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>District/Region</label><input placeholder="e.g., North District" /></div>
-              <div className={styles.formGroup}><label>Resource</label><input placeholder="e.g., Boats" /></div>
-              <div className={styles.formGroup}><label>Quantity</label><input type="number" placeholder="e.g., 5" /></div>
-              <div className={styles.formGroup}><label>Priority</label><input placeholder="High/Moderate/Low" /></div>
-            </div>
-            <div style={{display:'flex',gap:'10px',marginTop:'10px'}}>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Resources assigned to district', 'success')}>Assign</button>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Assignment updated', 'info')}>Update</button>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Assignment removed', 'warning')}>Remove</button>
-            </div>
-            <div style={{marginTop:'10px'}}>
-              <h4>Current Deployments</h4>
-              {[
-                {where:'Assam, India', what:'Boats', qty:8, status:'enroute'},
-                {where:'Jakarta, Indonesia', what:'Food Packets', qty:5000, status:'delivered'},
-                {where:'Louisiana, USA', what:'Water (L)', qty:15000, status:'loading'}
-              ].map((d,i)=> (
-                <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 1fr 1fr',gap:'8px',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,0.08)'}}>
-                  <div>{d.where}</div>
-                  <div>{d.what}</div>
-                  <div>Qty: {d.qty.toLocaleString()}</div>
-                  <div>Status: {d.status}</div>
-                </div>
-              ))}
+            <div className={styles.tableWrapper}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>User ID</th>
+                    <th>Resource</th>
+                    <th>Quantity</th>
+                    <th>Notes</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resourceRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{textAlign:'center',padding:'20px',opacity:0.6}}>No pending resource requests.</td>
+                    </tr>
+                  ) : (
+                    resourceRequests.map(req => (
+                      <tr key={req.id}>
+                        <td>{req.user_id}</td>
+                        <td style={{fontWeight:'700',color:'#10B981'}}>{req.resource_name}</td>
+                        <td>{req.quantity}</td>
+                        <td style={{fontSize:'12px',maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={req.notes}>{req.notes || '-'}</td>
+                        <td>{new Date(req.requested_at).toLocaleDateString()}</td>
+                        <td>
+                          <div style={{display:'flex',gap:'8px'}}>
+                            <button 
+                              className={styles.refreshBtn} 
+                              style={{padding:'4px 12px',fontSize:'12px',backgroundColor:'#10B981',color:'#000'}} 
+                              onClick={() => approveRequest(req.id)}
+                            >
+                              Approve
+                            </button>
+                            <button 
+                              className={styles.refreshBtn} 
+                              style={{padding:'4px 12px',fontSize:'12px',backgroundColor:'#EF4444'}} 
+                              onClick={() => rejectRequest(req.id)}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -1805,356 +2008,415 @@ const AdminDashboard = () => {
         </div>
 
         <div id="users" className={`${styles.contentSection} ${currentSection === 'users' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>User Management</h2>
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>User Accounts</h3>
-              <span className={styles.cardIcon}>👥</span>
+
+          {/* ─── End SMS Alert Panel removed ─── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+            <div>
+              <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                🛡️ SECURITY PROTOCOL
+              </span>
+              <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Personnel<br/>Directory</h1>
+              <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Manage system clearance levels, operational roles, and biometric access for all global AEGIS agents.</p>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Name</label><input placeholder="Officer Name" /></div>
-              <div className={styles.formGroup}><label>Email</label><input placeholder="officer@agency.gov" /></div>
-              <div className={styles.formGroup}><label>Role</label><input placeholder="Admin/District Officer/Rescue" /></div>
-              <button className={styles.refreshBtn} onClick={() => showNotification('User added', 'success')}>Add User</button>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              <button className={styles.refreshBtn} style={{ padding: '15px 30px', borderRadius: '40px', background: 'rgba(255,255,255,0.05)', color: '#FFF' }}>
+                📥 Export Manifest
+              </button>
+              <button className={styles.refreshBtn} style={{ padding: '15px 30px', borderRadius: '40px', background: '#10B981', color: '#000' }}>
+                👤 Onboard Agent
+              </button>
             </div>
-            <div className={styles.metric}>
-              <span className={styles.metricLabel}>Total Users</span>
-              <span className={styles.metricValue}>{usersCount}</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '20px', marginBottom: '30px' }}>
+            <div style={{ position: 'relative' }}>
+              <input 
+                placeholder="Search by name, ID, or callsign..." 
+                style={{ width: '100%', padding: '20px 20px 20px 60px', borderRadius: '40px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', color: '#FFF', fontSize: '16px' }}
+              />
+              <span style={{ position: 'absolute', left: '25px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
             </div>
-            <div style={{marginTop:'10px'}}>
-              <h4>Existing Users</h4>
-              {(Array.isArray(users) ? users : []).map((u,i)=>(
-                <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 2fr 1.5fr',gap:'8px',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,0.08)'}}>
-                  <div>{u.name}</div>
-                  <div>{u.role}</div>
-                  <div>{u.email}</div>
-                  <div style={{display:'flex',gap:'8px'}}>
-                    <button className={styles.refreshBtn} onClick={() => showNotification('User updated', 'info')}>Update</button>
-                    <button className={styles.refreshBtn} onClick={() => showNotification('User removed', 'warning')}>Remove</button>
+            <select style={{ padding: '0 30px', borderRadius: '40px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', color: '#FFF' }}>
+              <option>All Status</option>
+              <option>Active</option>
+              <option>Inactive</option>
+            </select>
+            <button style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#FFF' }}>🎚️</button>
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '0' }}>
+            <div style={{ padding: '30px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', textTransform: 'uppercase', letterSpacing: '2px', fontSize: '12px', fontWeight: '800', color: '#94A3B8' }}>
+              <span>Personnel</span>
+              <span>Callsign / ID</span>
+            </div>
+            <div style={{ padding: '0 10px' }}>
+              {(Array.isArray(users) ? users : []).map((u, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '25px 20px', borderBottom: i === users.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.03)', transition: 'background 0.3s' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <img 
+                      src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=10B981&color=fff&bold=true`} 
+                      style={{ width: '60px', height: '60px', borderRadius: '50%', border: '2px solid rgba(16, 185, 129, 0.2)' }}
+                      alt="Avatar"
+                    />
+                    <div>
+                      <div style={{ fontSize: '20px', fontWeight: '700', color: '#FFF', marginBottom: '4px' }}>{u.name}</div>
+                      <div style={{ fontSize: '14px', color: '#94A3B8' }}>{u.email}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#10B981', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>{u.role.toUpperCase()} - {i + 10}</div>
+                    <div style={{ fontSize: '12px', color: '#94A3B8', opacity: 0.6 }}>ID: {8000 + i}-PX</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ color: '#94A3B8', fontSize: '14px' }}>
+                Showing <span style={{ color: '#FFF', fontWeight: 'bold' }}>1 - {users.length}</span> of <span style={{ color: '#FFF', fontWeight: 'bold' }}>{usersCount}</span> agents
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: 'none', color: '#FFF' }}>‹</button>
+                <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#10B981', border: 'none', color: '#000', fontWeight: 'bold' }}>1</button>
+                <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: 'none', color: '#FFF' }}>2</button>
+                <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: 'none', color: '#FFF' }}>3</button>
+                <button style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: 'none', color: '#FFF' }}>›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="user_management" className={`${styles.contentSection} ${currentSection === 'user_management' ? styles.active : ''}`}>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              👤 PERSONNEL COMMAND
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>Personnel<br/>Directory</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px', marginTop: '15px' }}>Manage administrative access, regional coordinators, and ground personnel assignments.</p>
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+               <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '800' }}>Roles & Security</h3>
+               <div style={{ padding: '6px 15px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '20px', color: '#3B82F6', fontSize: '11px', fontWeight: '900' }}>
+                 ENCRYPTED ACCESS
+               </div>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '25px' }}>
+               <div style={{ padding: '25px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '15px' }}>PROTOCOL ACCESS</label>
+                  <input style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#FFF' }} placeholder="AI Agent Operator" />
+                  <button className={styles.refreshBtn} style={{ width: '100%', marginTop: '15px', background: '#10B981', color: '#000', fontWeight: '800' }}>UPDATE ACCESS</button>
+               </div>
+               <div style={{ padding: '25px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '15px' }}>SECURITY LAYER</label>
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '10px' }}>
+                    <input type="checkbox" defaultChecked style={{ width: '20px', height: '20px' }} />
+                    <span style={{ fontSize: '14px', color: '#FFF' }}>Biometric Auth Req</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                    <input type="checkbox" defaultChecked style={{ width: '20px', height: '20px' }} />
+                    <span style={{ fontSize: '14px', color: '#FFF' }}>Session Tunneling</span>
+                  </div>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="issues" className={`${styles.contentSection} ${currentSection === 'issues' ? styles.active : ''}`}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+            <div>
+              <span style={{ color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                📡 INCIDENT DISPATCH
+              </span>
+              <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Tactical<br/>Support</h1>
+              <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Central intelligence for community reports, system anomalies, and emergency assistance requests.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+               <select value={issueFilter} onChange={(e)=>setIssueFilter(e.target.value)} style={{ padding: '15px 25px', borderRadius: '40px', background: 'rgba(255,255,255,0.05)', color: '#FFF', border: '1px solid rgba(255,255,255,0.1)', fontWeight: 'bold' }}>
+                  <option value="all">ALL INCIDENTS</option>
+                  <option value="open">OPEN TICKETS</option>
+                  <option value="resolved">RESOLVED</option>
+               </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {communityReports.length === 0 ? (
+              <div className={styles.card} style={{ textAlign: 'center', padding: '100px', backgroundColor: 'rgba(21, 26, 35, 0.4)' }}>
+                <div style={{ fontSize: '48px', marginBottom: '20px' }}>🛡️</div>
+                <h3 style={{ fontSize: '24px' }}>Support Radar Clear</h3>
+                <p style={{ color: '#94A3B8' }}>No active community incidents reported in the last telemetry cycle.</p>
+              </div>
+            ) : (
+              communityReports
+                .filter(report => issueFilter==='all' ? true : report.status===issueFilter)
+                .map(report => (
+                <motion.div key={report.id} className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px', display: 'flex', gap: '30px', alignItems: 'center' }}>
+                   <div style={{ width: '60px', height: '60px', borderRadius: '16px', background: report.status === 'open' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>
+                     {report.status === 'open' ? '🚨' : '✅'}
+                   </div>
+                   <div style={{ flex: 1 }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '20px' }}>{report.report_type}</h3>
+                        <span style={{ fontSize: '11px', fontWeight: '900', color: report.status === 'open' ? '#EF4444' : '#10B981', background: report.status === 'open' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '20px' }}>{report.status.toUpperCase()}</span>
+                     </div>
+                     <p style={{ color: '#94A3B8', fontSize: '14px', margin: '0 0 10px 0' }}>{report.description}</p>
+                     <div style={{ fontSize: '12px', color: '#64748B', display: 'flex', gap: '20px' }}>
+                        <span>👤 REPORTED BY: {report.user_name.toUpperCase()}</span>
+                        <span>⏱️ {new Date(report.reported_at).toLocaleString()}</span>
+                     </div>
+                   </div>
+                   <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className={styles.refreshBtn} onClick={() => resolveReport(report.id)} style={{ background: '#10B981', color: '#000', fontWeight: '900' }}>RESOLVE</button>
+                      <button className={styles.refreshBtn} style={{ background: 'rgba(255,255,255,0.05)' }}>DETAILS</button>
+                   </div>
+                </motion.div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div id="funding" className={`${styles.contentSection} ${currentSection === 'funding' ? styles.active : ''}`}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px' }}>
+            <div>
+              <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                💰 FINANCIAL ASSETS
+              </span>
+              <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Relief<br/>Funding</h1>
+              <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Monitor humanitarian contributions, financial resources, and logistical item donation workflows.</p>
+            </div>
+            <button className={styles.refreshBtn} style={{ background: '#10B981', color: '#000', padding: '15px 30px', borderRadius: '40px', fontWeight: 'bold' }}>
+               💳 DISBURSE FUNDS
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px', marginBottom: '40px' }}>
+            <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px', borderTop: '4px solid #10B981' }}>
+               <h3 style={{ margin: '0 0 10px 0', fontSize: '24px' }}>Donations</h3>
+               <p style={{ color: '#94A3B8', fontSize: '14px', marginBottom: '15px' }}>Total financial contributions received from global community channels.</p>
+               <div style={{ fontSize: '32px', fontWeight: '900', color: '#10B981' }}>₹{donations.filter(d => d.status === 'accepted').reduce((sum, d) => sum + d.amount, 0).toLocaleString()}</div>
+            </div>
+            <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px', borderTop: '4px solid #3B82F6' }}>
+               <h3 style={{ margin: '0 0 10px 0', fontSize: '24px' }}>Item Pickups</h3>
+               <p style={{ color: '#94A3B8', fontSize: '14px', marginBottom: '15px' }}>Active item donation requests pending drone or personnel collection.</p>
+               <div style={{ fontSize: '32px', fontWeight: '900', color: '#3B82F6' }}>{itemPickups.filter(p => p.status === 'pending').length} ACTIVE</div>
+            </div>
+          </div>
+
+          {/* === DONATIONS LEDGER: approve / reject incoming donations === */}
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '0', marginBottom: '30px' }}>
+            <div style={{ padding: '25px 30px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <h3 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>💵 Incoming Donations</h3>
+               <span style={{ color: '#94A3B8', fontSize: '12px', fontWeight: '800', letterSpacing: '1px' }}>{donations.filter(d => d.status === 'pending').length} PENDING</span>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {donations.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#94A3B8', padding: '20px' }}>No donation records found.</p>
+              ) : (
+                donations.map((d, i) => (
+                  <div key={d.id || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px', borderBottom: i === donations.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.04)', background: d.status === 'pending' ? 'rgba(16,185,129,0.03)' : 'transparent', borderRadius: '8px' }}>
+                     <div>
+                       <div style={{ fontWeight: '700', fontSize: '16px' }}>{d.donor_name || 'Anonymous Donor'}</div>
+                       <div style={{ fontSize: '12px', color: '#64748B' }}>{d.donor_email}</div>
+                       <div style={{ fontSize: '13px', color: '#10B981', fontWeight: '700', marginTop: '4px' }}>₹{(d.amount || 0).toLocaleString()}</div>
+                     </div>
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                       <span style={{ fontSize: '10px', fontWeight: '900', color: d.status === 'accepted' ? '#10B981' : d.status === 'rejected' ? '#EF4444' : '#F59E0B', background: d.status === 'accepted' ? 'rgba(16,185,129,0.1)' : d.status === 'rejected' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', padding: '3px 10px', borderRadius: '20px' }}>{d.status.toUpperCase()}</span>
+                       {d.status === 'pending' && (
+                         <div style={{ display: 'flex', gap: '8px' }}>
+                           <button className={styles.refreshBtn} style={{ padding: '5px 14px', fontSize: '11px', background: '#10B981', color: '#000', fontWeight: '800' }} onClick={() => approveDonation(d.id)}>ACCEPT</button>
+                           <button className={styles.refreshBtn} style={{ padding: '5px 14px', fontSize: '11px', background: 'rgba(239,68,68,0.15)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)' }} onClick={() => rejectDonation(d.id)}>REJECT</button>
+                         </div>
+                       )}
+                     </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* === VOLUNTEER REQUESTS: approve / reject pending volunteer sign-ups === */}
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '0', marginBottom: '30px' }}>
+            <div style={{ padding: '25px 30px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <h3 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>🙋 Volunteer Join Requests</h3>
+               <span style={{ color: '#F59E0B', fontSize: '12px', fontWeight: '800', letterSpacing: '1px' }}>{volunteerRequests.filter(v => v.status === 'pending').length} AWAITING APPROVAL</span>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {volunteerRequests.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#94A3B8', padding: '20px' }}>No volunteer applications received yet.</p>
+              ) : (
+                volunteerRequests.map((v, i) => (
+                  <div key={v.id || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px', borderBottom: i === volunteerRequests.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.04)', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                      <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(v.volunteer_name || 'V')}&background=10B981&color=fff&bold=true`} style={{ width: '46px', height: '46px', borderRadius: '50%' }} />
+                      <div>
+                        <div style={{ fontWeight: '700', fontSize: '16px' }}>{v.volunteer_name}</div>
+                        <div style={{ fontSize: '12px', color: '#64748B' }}>{v.volunteer_email}</div>
+                        <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '3px' }}>Skills: {v.areas_of_interest || 'General'}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '900', color: v.status === 'accepted' ? '#10B981' : v.status === 'rejected' ? '#EF4444' : '#F59E0B', background: v.status === 'accepted' ? 'rgba(16,185,129,0.1)' : v.status === 'rejected' ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', padding: '3px 10px', borderRadius: '20px' }}>{(v.status || 'pending').toUpperCase()}</span>
+                      {(!v.status || v.status === 'pending') && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button className={styles.refreshBtn} style={{ padding: '5px 14px', fontSize: '11px', background: '#10B981', color: '#000', fontWeight: '800' }} onClick={() => acceptVolunteer(v.id, v.duration_months || 6)}>APPROVE</button>
+                          <button className={styles.refreshBtn} style={{ padding: '5px 14px', fontSize: '11px', background: 'rgba(239,68,68,0.15)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.2)' }} onClick={() => rejectVolunteer(v.id)}>REJECT</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div id="volunteers" className={`${styles.contentSection} ${currentSection === 'volunteers' ? styles.active : ''}`}>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              👥 OPERATIONAL GRID
+            </span>
+            <h2 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Volunteer<br/>Management</h2>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Orchestrate humanitarian response teams and allocate skilled personnel across crisis zones with precision intelligence.</p>
+            <button className={styles.refreshBtn} style={{ marginTop: '30px', padding: '15px 35px', borderRadius: '40px', background: '#10B981', color: '#000', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              👤 Add Volunteer
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+            {[
+              { label: 'TOTAL VOLUNTEERS', value: '1,284', trend: '+12% this week', icon: '👥' },
+              { label: 'ACTIVE IN FIELD', value: '842', trend: '14 active sectors', icon: '📍' },
+              { label: 'AVAILABLE', value: '312', trend: 'Ready for dispatch', icon: '📅' },
+              { label: 'ASSIGNED TASKS', value: '156', trend: '89% completion rate', icon: '✅' }
+            ].map((m, i) => (
+              <div key={i} className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px' }}>{m.label}</div>
+                  <span style={{ opacity: 0.3 }}>{m.icon}</span>
+                </div>
+                <div style={{ fontSize: '36px', fontWeight: '900', marginBottom: '10px' }}>{m.value}</div>
+                <div style={{ fontSize: '12px', color: '#10B981', fontWeight: '700' }}>● {m.trend}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '0', marginBottom: '40px' }}>
+            <div style={{ padding: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <h3 style={{ margin: 0, fontSize: '24px', fontWeight: '800' }}>Personnel Roster</h3>
+              <div style={{ display: 'flex', gap: '20px', opacity: 0.5 }}>
+                <span>🎚️</span>
+                <span>🔍</span>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              {(Array.isArray(volunteerRequests) ? volunteerRequests : []).map((v, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: i === volunteerRequests.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.03)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(v.volunteer_name)}&background=10B981&color=fff&bold=true`} style={{ width: '50px', height: '50px', borderRadius: '50%' }} />
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: '700' }}>{v.volunteer_name}</div>
+                      <div style={{ fontSize: '13px', color: '#94A3B8' }}>{v.volunteer_email}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '700' }}>Sector {7 + i}-G</div>
+                    <div style={{ fontSize: '12px', color: '#94A3B8' }}>{v.areas_of_interest}</div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Roles & Permissions</h3>
-              <span className={styles.cardIcon}>🔐</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Define Role</label><input placeholder="AI Agent Operator" /></div>
-              <div className={styles.formGroup}><label>Access Modules</label><input placeholder="Resources, Monitoring" /></div>
-              <button className={styles.refreshBtn} onClick={() => showNotification('Role saved', 'success')}>Save Role</button>
-            </div>
-            <div style={{marginTop:'10px'}}>
-              <h4>Security Settings</h4>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-                <div className={styles.formGroup}><label>MFA for Critical Roles</label><input type="checkbox" defaultChecked /></div>
-                <div className={styles.formGroup}><label>Session Timeout (min)</label><input type="number" defaultValue={30} /></div>
-                <div className={styles.formGroup}><label>Password Policy</label><input placeholder="Min 8 chars, symbol required" /></div>
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px', marginBottom: '40px' }}>
+            <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '30px', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <span style={{ width: '40px', height: '40px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📋</span>
+              Task Assignment
+            </h3>
+            <div style={{ display: 'grid', gap: '30px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '12px' }}>SELECT VOLUNTEER</label>
+                <select style={{ width: '100%', padding: '18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: '#FFF' }}>
+                  <option>Select Personnel...</option>
+                  {volunteerRequests.map(v => <option key={v.id}>{v.volunteer_name}</option>)}
+                </select>
               </div>
-            </div>
-
-            <div style={{marginTop:'10px'}}>
-              <h4>Activity Logs</h4>
-              <div style={{fontSize:'12px',opacity:0.8}}>Admin approved 2 resource requests • District Officer updated route to School A • Rescue Team marked shelter full</div>
-            </div>
-          </div>
-        </div>
-
-        <div id="issues" className={`${styles.contentSection} ${currentSection === 'issues' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>Issues & Support</h2>
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Community Reports ({communityReports.length})</h3>
-              <span className={styles.cardIcon}>📋</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'10px',marginBottom:'10px'}}>
-              <input placeholder="Search reports..." value={issueSearch} onChange={(e)=>setIssueSearch(e.target.value)} style={{padding:'8px',border:'1px solid rgba(0,255,136,0.3)',background:'rgba(255,255,255,0.05)',color:'#fff',borderRadius:'6px'}} />
-              <select value={issueFilter} onChange={(e)=>setIssueFilter(e.target.value)} style={{padding:'8px',border:'1px solid rgba(0,255,136,0.3)',background:'rgba(255,255,255,0.05)',color:'#fff',borderRadius:'6px'}}>
-                <option value="all" style={{color:'#000'}}>All</option>
-                <option value="open" style={{color:'#000'}}>Open</option>
-                <option value="investigating" style={{color:'#000'}}>Investigating</option>
-                <option value="resolved" style={{color:'#000'}}>Resolved</option>
-              </select>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 2fr 1.5fr',gap:'12px',padding:'8px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',opacity:0.8}}>
-              <div>Type</div>
-              <div>Status</div>
-              <div>Details</div>
-              <div style={{textAlign:'right'}}>Actions</div>
-            </div>
-            <div style={{maxHeight:'420px',overflowY:'auto'}}>
-              {communityReports.length === 0 ? (
-                <div style={{padding:'20px',textAlign:'center',opacity:0.6}}>No community reports yet</div>
-              ) : (
-                communityReports
-                  .filter(report => issueFilter==='all' ? true : report.status===issueFilter)
-                  .filter(report => (issueSearch||'').trim()==='' ? true : (report.report_type?.toLowerCase().includes(issueSearch.toLowerCase()) || report.description?.toLowerCase().includes(issueSearch.toLowerCase())))
-                  .map(report => (
-                    <div key={report.id} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 2fr 1.5fr',gap:'12px',padding:'12px',borderBottom:'1px solid rgba(255,255,255,0.08)',backgroundColor: report.status === 'open' ? 'rgba(255,107,107,0.05)' : 'transparent'}}>
-                      <div>
-                        <div style={{fontWeight:600}}>{report.report_type}</div>
-                        <div style={{fontSize:'11px',opacity:0.7,marginTop:'4px'}}>By: {report.user_name}</div>
-                      </div>
-                      <div>
-                        <span 
-                          className={styles.miniMetric} 
-                          style={{
-                            padding:'4px 8px',
-                            display:'inline-block',
-                            background: report.status === 'open' ? 'rgba(255,107,107,0.2)' : (report.status === 'investigating' ? 'rgba(255,167,38,0.2)' : 'rgba(16,185,129,0.2)'),
-                            color: report.status === 'open' ? '#ff6b6b' : (report.status === 'investigating' ? '#ffa726' : '#10b981')
-                          }}
-                        >
-                          {report.status.toUpperCase()}
-                        </span>
-                        <div style={{fontSize:'11px',opacity:0.7,marginTop:'4px'}}>{new Date(report.reported_at).toLocaleString()}</div>
-                      </div>
-                      <div style={{opacity:0.9,fontSize:'13px'}}>{report.description}</div>
-                      <div style={{display:'flex',gap:'6px',justifyContent:'flex-end',flexWrap:'wrap'}}>
-                        {report.status === 'open' && (
-                          <button 
-                            className={styles.refreshBtn} 
-                            onClick={() => investigateReport(report.id)}
-                            style={{backgroundColor:'#ffa726',padding:'6px 10px',fontSize:'12px'}}
-                          >
-                            Investigate
-                          </button>
-                        )}
-                        {report.status !== 'resolved' && (
-                          <button 
-                            className={styles.refreshBtn} 
-                            onClick={() => resolveReport(report.id)}
-                            style={{backgroundColor:'#10b981',padding:'6px 10px',fontSize:'12px'}}
-                          >
-                            Resolve
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-              )}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '12px' }}>TARGET TASK</label>
+                <select style={{ width: '100%', padding: '18px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', color: '#FFF' }}>
+                  <option>Medical Triage - Sector 7</option>
+                  <option>Relief Distribution - Sector 4</option>
+                  <option>Shelter Setup - Metro Zone</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '12px' }}>PRIORITY LEVEL</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px' }}>
+                  {['CRITICAL', 'STANDARD', 'LOW'].map(p => (
+                    <button key={p} style={{ padding: '12px', background: p === 'STANDARD' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.03)', border: p === 'STANDARD' ? '1px solid #10B981' : '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', color: p === 'STANDARD' ? '#10B981' : '#94A3B8', fontSize: '11px', fontWeight: '900', letterSpacing: '1px' }}>{p}</button>
+                  ))}
+                </div>
+              </div>
+              <button className={styles.refreshBtn} style={{ width: '100%', padding: '20px', borderRadius: '40px', background: '#00D1FF', color: '#000', fontWeight: '800', border: 'none', letterSpacing: '1px', marginTop: '20px' }}>ASSIGN PERSONNEL</button>
             </div>
           </div>
-        </div>
 
-        <div id="funding" className={`${styles.contentSection} ${currentSection === 'funding' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>Funding & Volunteers</h2>
-          
-          {/* Donations Section */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Monetary Donations ({donations.filter(d => d.status === 'pending').length})</h3>
-              <span className={styles.cardIcon}>💰</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1.5fr',gap:'12px',padding:'8px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',opacity:0.8}}>
-              <div>Donor</div>
-              <div>Amount</div>
-              <div>Status</div>
-              <div style={{textAlign:'right'}}>Actions</div>
-            </div>
-            <div style={{maxHeight:'400px',overflowY:'auto'}}>
-              {donations.length === 0 ? (
-                <div style={{padding:'20px',textAlign:'center',opacity:0.6}}>No donations yet</div>
-              ) : (
-                donations.map(donation => (
-                  <div key={donation.id} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1.5fr',gap:'12px',padding:'12px',borderBottom:'1px solid rgba(255,255,255,0.08)',backgroundColor: donation.status === 'pending' ? 'rgba(16,185,129,0.05)' : 'transparent'}}>
-                    <div>
-                      <div style={{fontWeight:600}}>{donation.donor_name || 'Anonymous'}</div>
-                      <div style={{fontSize:'11px',opacity:0.7}}>{donation.donor_email}</div>
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px' }}>
+             <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '30px' }}>Recent Activity</h3>
+             <div style={{ display: 'grid', gap: '35px' }}>
+                {[
+                  { time: '2 minutes ago', title: 'Volunteer Dispatch', desc: 'Elena Rodriguez assigned to Medical Base Delta for night shift.', iconColor: '#10B981' },
+                  { time: '45 minutes ago', title: 'Skill Verification', desc: 'Marcus Chen\'s Heavy Machinery certification verified and updated.', iconColor: '#00D1FF' },
+                  { time: '2 hours ago', title: 'Task Completed', desc: 'Shelter setup in Sector 4-B marked as complete by Sarah Jenkins.', iconColor: '#A855F7' }
+                ].map((a, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '20px', position: 'relative' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: a.iconColor, boxShadow: `0 0 10px ${a.iconColor}` }}></div>
+                      {i < 2 && <div style={{ flex: 1, width: '2px', background: 'rgba(255,255,255,0.05)', margin: '10px 0' }}></div>}
                     </div>
-                    <div style={{fontSize:'18px',fontWeight:'bold',color:'#10b981'}}>₹{donation.amount.toLocaleString()}</div>
-                    <div>
-                      <span style={{
-                        padding:'4px 8px',
-                        borderRadius:'4px',
-                        fontSize:'12px',
-                        backgroundColor: donation.status === 'accepted' ? '#10b98144' : (donation.status === 'rejected' ? '#ef444444' : '#f59e0b44'),
-                        color: donation.status === 'accepted' ? '#10b981' : (donation.status === 'rejected' ? '#ef4444' : '#f59e0b')
-                      }}>
-                        {donation.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{display:'flex',gap:'6px',justifyContent:'flex-end'}}>
-                      {donation.status === 'pending' && (
-                        <>
-                          <button className={styles.refreshBtn} onClick={() => acceptDonation(donation.id)} style={{backgroundColor:'#10b981',padding:'6px 12px',fontSize:'12px'}}>✓ Accept</button>
-                          <button className={styles.refreshBtn} onClick={() => rejectDonation(donation.id)} style={{backgroundColor:'#ef4444',padding:'6px 12px',fontSize:'12px'}}>✗ Reject</button>
-                        </>
-                      )}
+                    <div style={{ paddingBottom: i < 2 ? '30px' : '0' }}>
+                      <div style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '5px' }}>{a.time}</div>
+                      <div style={{ fontSize: '16px', fontWeight: '700', marginBottom: '5px' }}>{a.title}</div>
+                      <div style={{ fontSize: '14px', color: '#94A3B8', lineHeight: '1.5' }}>{a.desc}</div>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Item Pickups Section */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Item Donation Pickups ({itemPickups.filter(p => p.status === 'pending').length})</h3>
-              <span className={styles.cardIcon}>📦</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 1fr 1.5fr',gap:'12px',padding:'8px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',opacity:0.8}}>
-              <div>Items</div>
-              <div>Address</div>
-              <div>Status</div>
-              <div style={{textAlign:'right'}}>Actions</div>
-            </div>
-            <div style={{maxHeight:'400px',overflowY:'auto'}}>
-              {itemPickups.length === 0 ? (
-                <div style={{padding:'20px',textAlign:'center',opacity:0.6}}>No pickup requests yet</div>
-              ) : (
-                itemPickups.map(pickup => (
-                  <div key={pickup.id} style={{display:'grid',gridTemplateColumns:'2fr 1.5fr 1fr 1.5fr',gap:'12px',padding:'12px',borderBottom:'1px solid rgba(255,255,255,0.08)',backgroundColor: pickup.status === 'pending' ? 'rgba(16,185,129,0.05)' : 'transparent'}}>
-                    <div style={{fontSize:'13px'}}>{pickup.items}</div>
-                    <div style={{fontSize:'12px',opacity:0.8}}>{pickup.pickup_address}</div>
-                    <div>
-                      <span style={{
-                        padding:'4px 8px',
-                        borderRadius:'4px',
-                        fontSize:'12px',
-                        backgroundColor: pickup.status === 'scheduled' ? '#10b98144' : (pickup.status === 'rejected' ? '#ef444444' : '#f59e0b44'),
-                        color: pickup.status === 'scheduled' ? '#10b981' : (pickup.status === 'rejected' ? '#ef4444' : '#f59e0b')
-                      }}>
-                        {pickup.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{display:'flex',gap:'6px',justifyContent:'flex-end'}}>
-                      {pickup.status === 'pending' && (
-                        <>
-                          <button className={styles.refreshBtn} onClick={() => schedulePickup(pickup.id)} style={{backgroundColor:'#10b981',padding:'6px 12px',fontSize:'12px'}}>✓ Schedule</button>
-                          <button className={styles.refreshBtn} onClick={() => rejectPickup(pickup.id)} style={{backgroundColor:'#ef4444',padding:'6px 12px',fontSize:'12px'}}>✗ Reject</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Volunteer Requests Section */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Volunteer Requests ({volunteerRequests.filter(v => v.status === 'pending').length})</h3>
-              <span className={styles.cardIcon}>🙋‍♂️</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1fr 2fr',gap:'12px',padding:'8px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',opacity:0.8}}>
-              <div>Name</div>
-              <div>Contact</div>
-              <div>Duration</div>
-              <div>Status</div>
-              <div style={{textAlign:'right'}}>Actions</div>
-            </div>
-            <div style={{maxHeight:'400px',overflowY:'auto'}}>
-              {volunteerRequests.length === 0 ? (
-                <div style={{padding:'20px',textAlign:'center',opacity:0.6}}>No volunteer requests yet</div>
-              ) : (
-                volunteerRequests.map(volunteer => (
-                  <div key={volunteer.id} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1fr 2fr',gap:'12px',padding:'12px',borderBottom:'1px solid rgba(255,255,255,0.08)',backgroundColor: volunteer.status === 'pending' ? 'rgba(16,185,129,0.05)' : 'transparent'}}>
-                    <div>
-                      <div style={{fontWeight:600}}>{volunteer.volunteer_name}</div>
-                      <div style={{fontSize:'11px',opacity:0.7}}>{volunteer.areas_of_interest}</div>
-                    </div>
-                    <div style={{fontSize:'12px'}}>
-                      <div>{volunteer.volunteer_email}</div>
-                      <div>{volunteer.volunteer_phone}</div>
-                    </div>
-                    <div>{volunteer.duration_months} month{volunteer.duration_months > 1 ? 's' : ''}</div>
-                    <div>
-                      <span style={{
-                        padding:'4px 8px',
-                        borderRadius:'4px',
-                        fontSize:'12px',
-                        backgroundColor: volunteer.status === 'accepted' ? '#10b98144' : (volunteer.status === 'rejected' ? '#ef444444' : '#f59e0b44'),
-                        color: volunteer.status === 'accepted' ? '#10b981' : (volunteer.status === 'rejected' ? '#ef4444' : '#f59e0b')
-                      }}>
-                        {volunteer.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{display:'flex',gap:'6px',justifyContent:'flex-end',alignItems:'center'}}>
-                      {volunteer.status === 'pending' && (
-                        <>
-                          <select id={`duration-${volunteer.id}`} defaultValue={volunteer.duration_months} style={{padding:'4px 8px',backgroundColor:'#0f172a',border:'1px solid #334155',borderRadius:'4px',color:'white',fontSize:'12px'}}>
-                            <option value="1">1 Month</option>
-                            <option value="2">2 Months</option>
-                            <option value="6">6 Months</option>
-                          </select>
-                          <button className={styles.refreshBtn} onClick={() => {
-                            const duration = document.getElementById(`duration-${volunteer.id}`).value;
-                            acceptVolunteer(volunteer.id, parseInt(duration));
-                          }} style={{backgroundColor:'#10b981',padding:'6px 12px',fontSize:'12px'}}>✓ Accept</button>
-                          <button className={styles.refreshBtn} onClick={() => rejectVolunteer(volunteer.id)} style={{backgroundColor:'#ef4444',padding:'6px 12px',fontSize:'12px'}}>✗ Reject</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                ))}
+             </div>
+             <button style={{ width: '100%', marginTop: '40px', background: 'transparent', border: 'none', color: '#94A3B8', fontSize: '13px', fontWeight: '800', letterSpacing: '2px', textDecoration: 'underline' }}>VIEW FULL HISTORY</button>
           </div>
         </div>
 
         <div id="analytics" className={`${styles.contentSection} ${currentSection === 'analytics' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>System Analytics</h2>
-          
-          {/* Overview Metrics */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))',gap:'15px',marginBottom:'20px'}}>
-            <div className={styles.card} style={{padding:'20px',textAlign:'center'}}>
-              <h4 style={{margin:'0 0 10px 0',opacity:0.8}}>Total Floods Predicted</h4>
-              <div style={{fontSize:'2.5rem',fontWeight:'bold',color:'#00ff88'}}>{floods.length}</div>
-            </div>
-            <div className={styles.card} style={{padding:'20px',textAlign:'center'}}>
-              <h4 style={{margin:'0 0 10px 0',opacity:0.8}}>Total Users</h4>
-              <div style={{fontSize:'2.5rem',fontWeight:'bold',color:'#00d4ff'}}>{usersCount}</div>
-            </div>
-            <div className={styles.card} style={{padding:'20px',textAlign:'center'}}>
-              <h4 style={{margin:'0 0 10px 0',opacity:0.8}}>Resource Requests</h4>
-              <div style={{fontSize:'2.5rem',fontWeight:'bold',color:'#ffa726'}}>{resourceRequests.length}</div>
-            </div>
-            <div className={styles.card} style={{padding:'20px',textAlign:'center'}}>
-              <h4 style={{margin:'0 0 10px 0',opacity:0.8}}>Community Reports</h4>
-              <div style={{fontSize:'2.5rem',fontWeight:'bold',color:'#a78bfa'}}>{communityReports.length}</div>
-            </div>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              📊 STRATEGIC INTELLIGENCE
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>System<br/>Analytics</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px', marginTop: '15px' }}>High-fidelity data visualization and predictive modeling for global flood management optimization.</p>
           </div>
 
-          {/* Regional Severity Analysis */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Regional Severity Analysis</h3>
-              <span className={styles.cardIcon}>📊</span>
-            </div>
-            <div style={{height:'300px'}}>
-              <Bar data={{
-                labels: ['Assam', 'Kerala', 'Uttar Pradesh', 'West Bengal', 'Odisha'],
-                datasets: [{
-                  label: 'High Severity',
-                  data: [12, 8, 5, 10, 7],
-                  backgroundColor: '#ef4444'
-                }, {
-                  label: 'Medium Severity',
-                  data: [8, 15, 12, 8, 10],
-                  backgroundColor: '#ffa726'
-                }, {
-                  label: 'Low Severity',
-                  data: [5, 7, 8, 6, 8],
-                  backgroundColor: '#10b981'
-                }]
-              }} options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                  x: { stacked: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#fff' } },
-                  y: { stacked: true, beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#fff' } }
-                },
-                plugins: {
-                  legend: { labels: { color: '#fff' } }
-                }
-              }} />
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+            {[
+              { label: 'TOTAL PREDICTIONS', value: floods.length, trend: '+4 today', icon: '📈' },
+              { label: 'ACTIVE USERS', value: usersCount, trend: '98 online', icon: '👥' },
+              { label: 'COMMUNITY REPORTS', value: communityReports.length, trend: '24 solved', icon: '📞' },
+              { label: 'FUNDS ALLOCATED', value: `₹${(financialAidRequests.filter(a => a.status === 'approved').reduce((sum, a) => sum + (a.approved_amount || 0), 0) / 1000).toFixed(1)}K`, trend: '89.4% util', icon: '💰' }
+            ].map((m, i) => (
+              <div key={i} className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '15px' }}>{m.label}</div>
+                <div style={{ fontSize: '36px', fontWeight: '900', marginBottom: '10px' }}>{m.value}</div>
+                <div style={{ fontSize: '12px', color: '#10B981' }}>● {m.trend}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', height: '400px', padding: '40px', marginBottom: '40px' }}>
+             <h3 style={{ margin: '0 0 30px 0', fontSize: '24px', fontWeight: '800' }}>Impact Propagation Model</h3>
+             <Bar data={{
+                labels: ['Assam', 'Kerala', 'UP', 'Bengal', 'Odisha'],
+                datasets: [{ label: 'Severity Index', data: [85, 42, 63, 91, 55], backgroundColor: '#10B981' }]
+             }} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }} />
           </div>
 
           {/* Resources Requested & Allocated */}
@@ -2325,239 +2587,93 @@ const AdminDashboard = () => {
         </div>
 
         <div id="recovery" className={`${styles.contentSection} ${currentSection === 'recovery' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>Recovery Reports</h2>
-          
-          {/* Damage Reports Section */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Damage Assessment Reports ({damageReports.filter(r => r.status === 'pending').length})</h3>
-              <span className={styles.cardIcon}>📋</span>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1.5fr 1fr 2fr',gap:'12px',padding:'8px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',opacity:0.8}}>
-              <div>User</div>
-              <div>Property Type</div>
-              <div>Damage Level</div>
-              <div>Estimated Loss</div>
-              <div>Status</div>
-              <div style={{textAlign:'right'}}>Actions</div>
-            </div>
-            <div style={{maxHeight:'400px',overflowY:'auto'}}>
-              {damageReports.length === 0 ? (
-                <div style={{padding:'20px',textAlign:'center',opacity:0.6}}>No damage reports yet</div>
-              ) : (
-                damageReports.map(report => (
-                  <div key={report.id} style={{display:'grid',gridTemplateColumns:'1.5fr 1fr 1fr 1.5fr 1fr 2fr',gap:'12px',padding:'12px',borderBottom:'1px solid rgba(255,255,255,0.08)',backgroundColor: report.status === 'pending' ? 'rgba(16,185,129,0.05)' : 'transparent'}}>
-                    <div>
-                      <div style={{fontWeight:600}}>{report.user_name}</div>
-                      <div style={{fontSize:'11px',opacity:0.7}}>{new Date(report.submitted_at).toLocaleString()}</div>
-                    </div>
-                    <div>{report.property_type}</div>
-                    <div>
-                      <span style={{
-                        padding:'4px 8px',
-                        borderRadius:'4px',
-                        fontSize:'11px',
-                        backgroundColor: report.damage_level.includes('Severe') || report.damage_level.includes('Major') ? '#ef444444' : '#ffa72644',
-                        color: report.damage_level.includes('Severe') || report.damage_level.includes('Major') ? '#ef4444' : '#ffa726'
-                      }}>
-                        {report.damage_level}
-                      </span>
-                    </div>
-                    <div style={{fontWeight:'bold',color:'#ef4444',fontSize:'14px'}}>₹{report.estimated_loss.toLocaleString()}</div>
-                    <div>
-                      <span style={{
-                        padding:'4px 8px',
-                        borderRadius:'4px',
-                        fontSize:'12px',
-                        backgroundColor: report.status === 'approved' ? '#10b98144' : (report.status === 'rejected' ? '#ef444444' : '#f59e0b44'),
-                        color: report.status === 'approved' ? '#10b981' : (report.status === 'rejected' ? '#ef4444' : '#f59e0b')
-                      }}>
-                        {report.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{display:'flex',gap:'6px',justifyContent:'flex-end'}}>
-                      {report.status === 'pending' && (
-                        <>
-                          <button className={styles.refreshBtn} onClick={() => approveDamageReport(report.id)} style={{backgroundColor:'#10b981',padding:'6px 12px',fontSize:'12px'}}>✓ Approve</button>
-                          <button className={styles.refreshBtn} onClick={() => rejectDamageReport(report.id)} style={{backgroundColor:'#ef4444',padding:'6px 12px',fontSize:'12px'}}>✗ Reject</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              🏗️ POST-IMPACT RECOVERY
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0 0 15px 0', lineHeight: '1.1' }}>Recovery<br/>Planning</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px' }}>Coordinate reconstruction efforts, damage assessment verification, and financial aid distribution.</p>
           </div>
 
-          {/* Financial Aid Requests Section */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <h3 className={styles.cardTitle}>Financial Aid Requests ({financialAidRequests.filter(a => a.status === 'pending').length})</h3>
-              <span className={styles.cardIcon}>💰</span>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px', marginBottom: '40px' }}>
+             <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '20px' }}>Damage Reports</h3>
+                <div style={{ fontSize: '32px', fontWeight: '900' }}>{damageReports.length}</div>
+                <div style={{ fontSize: '12px', color: '#F59E0B' }}>● {damageReports.filter(r => r.status === 'pending').length} pending review</div>
+             </div>
+             <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '20px' }}>Aid Approved</h3>
+                <div style={{ fontSize: '32px', fontWeight: '900', color: '#10B981' }}>₹{financialAidRequests.filter(a => a.status === 'approved').reduce((sum, a) => sum + (a.approved_amount || 0), 0).toLocaleString()}</div>
+             </div>
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '0' }}>
+            <div style={{ padding: '30px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+               <h3 style={{ margin: 0, fontSize: '22px', fontWeight: '800' }}>Active Recovery Queue</h3>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1.5fr 1.5fr 1.5fr 1fr 2fr',gap:'12px',padding:'8px 12px',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(0,255,136,0.2)',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',opacity:0.8}}>
-              <div>User</div>
-              <div>Aid Type</div>
-              <div>Amount Requested</div>
-              <div>Status</div>
-              <div style={{textAlign:'right'}}>Actions</div>
-            </div>
-            <div style={{maxHeight:'400px',overflowY:'auto'}}>
-              {financialAidRequests.length === 0 ? (
-                <div style={{padding:'20px',textAlign:'center',opacity:0.6}}>No financial aid requests yet</div>
-              ) : (
-                financialAidRequests.map(aid => (
-                  <div key={aid.id} style={{display:'grid',gridTemplateColumns:'1.5fr 1.5fr 1.5fr 1fr 2fr',gap:'12px',padding:'12px',borderBottom:'1px solid rgba(255,255,255,0.08)',backgroundColor: aid.status === 'pending' ? 'rgba(16,185,129,0.05)' : 'transparent'}}>
-                    <div>
-                      <div style={{fontWeight:600}}>{aid.user_name}</div>
-                      <div style={{fontSize:'11px',opacity:0.7}}>{new Date(aid.requested_at).toLocaleString()}</div>
-                    </div>
-                    <div>{aid.aid_type}</div>
-                    <div style={{fontWeight:'bold',color:'#10b981',fontSize:'14px'}}>₹{aid.amount_requested.toLocaleString()}</div>
-                    <div>
-                      <span style={{
-                        padding:'4px 8px',
-                        borderRadius:'4px',
-                        fontSize:'12px',
-                        backgroundColor: aid.status === 'approved' ? '#10b98144' : (aid.status === 'rejected' ? '#ef444444' : '#f59e0b44'),
-                        color: aid.status === 'approved' ? '#10b981' : (aid.status === 'rejected' ? '#ef4444' : '#f59e0b')
-                      }}>
-                        {aid.status.toUpperCase()}
-                      </span>
-                      {aid.approved_amount && (
-                        <div style={{fontSize:'11px',marginTop:'4px',color:'#10b981'}}>Approved: ₹{aid.approved_amount.toLocaleString()}</div>
-                      )}
-                    </div>
-                    <div style={{display:'flex',gap:'6px',justifyContent:'flex-end',alignItems:'center'}}>
-                      {aid.status === 'pending' && (
-                        <>
-                          <input id={`aid-amount-${aid.id}`} type="number" defaultValue={aid.amount_requested} placeholder="Approved amount" style={{width:'120px',padding:'6px 8px',backgroundColor:'#0f172a',border:'1px solid #334155',borderRadius:'4px',color:'white',fontSize:'12px'}} />
-                          <button className={styles.refreshBtn} onClick={() => {
-                            const amount = document.getElementById(`aid-amount-${aid.id}`).value;
-                            approveFinancialAid(aid.id, parseFloat(amount));
-                          }} style={{backgroundColor:'#10b981',padding:'6px 12px',fontSize:'12px'}}>✓ Approve</button>
-                          <button className={styles.refreshBtn} onClick={() => rejectFinancialAid(aid.id)} style={{backgroundColor:'#ef4444',padding:'6px 12px',fontSize:'12px'}}>✗ Reject</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+            <div style={{ padding: '20px' }}>
+              {damageReports.length === 0 ? <p style={{ textAlign: 'center', color: '#94A3B8' }}>No reports recorded.</p> : damageReports.filter(r => r.status === 'pending').map((r, i) => (
+                <div key={r.id || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: i === damageReports.length - 1 ? 'none' : '1px solid rgba(255,255,255,0.03)' }}>
+                   <div>
+                     <div style={{ fontWeight: '700' }}>{r.property_type.toUpperCase()} - {r.user_name || 'Anonymous User'}</div>
+                     <div style={{ fontSize: '12px', color: '#94A3B8' }}>Est. Loss: ₹{(r.estimated_loss || 0).toLocaleString()}</div>
+                     <div style={{ fontSize: '11px', color: '#10B981', marginTop: '4px' }}>Desc: {r.description || 'No notes provided'}</div>
+                   </div>
+                   <div style={{ display: 'flex', gap: '15px' }}>
+                      <button 
+                        className={styles.refreshBtn} 
+                        style={{ background: '#10B981', color: '#000', fontWeight: '800', fontSize: '12px' }}
+                        onClick={() => approveDamageReport(r.id)}
+                      >VERIFY & APPROVE</button>
+                      <button 
+                        className={styles.refreshBtn} 
+                        style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '12px' }}
+                        onClick={() => rejectDamageReport(r.id)}
+                      >REJECT</button>
+                   </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
         <div id="settings" className={`${styles.contentSection} ${currentSection === 'settings' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>System Settings</h2>
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>1) Prediction & Alert Settings</h3><span className={styles.cardIcon}>⚠️</span></div>
-            <h4>Threshold Configuration</h4>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Rainfall (mm/hr)</label><input type="number" defaultValue={50} /></div>
-              <div className={styles.formGroup}><label>River Level (m)</label><input type="number" defaultValue={5} /></div>
-              <div className={styles.formGroup}><label>Soil Saturation (%)</label><input type="number" defaultValue={85} /></div>
-              <div className={styles.formGroup}><label>Dam Storage (%)</label><input type="number" defaultValue={90} /></div>
-            </div>
-            <h4 style={{marginTop:'10px'}}>Alert Levels & Escalation</h4>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Severity Levels</label><input placeholder="Low, Moderate, High, Extreme" defaultValue="Low, Moderate, High, Extreme"/></div>
-              <div className={styles.formGroup}><label>Notify</label><input placeholder="Citizens, Officials, Central" defaultValue="Citizens, Officials, Central"/></div>
-            </div>
-            <h4 style={{marginTop:'10px'}}>Notification Preferences</h4>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Channels</label><input placeholder="SMS, Email, Push, Siren, WhatsApp, Boards" defaultValue="SMS, Email, Push, Siren, WhatsApp, Boards"/></div>
-              <div className={styles.formGroup}><label>Language</label><input placeholder="English + Local" defaultValue="English + Local"/></div>
-            </div>
-            <button className={styles.refreshBtn} onClick={() => showNotification('Prediction & alerts saved', 'success')} style={{marginTop:'10px'}}>Save Section</button>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              ⚙️ CORE CONFIGURATION
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>System<br/>Settings</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px', marginTop: '15px' }}>Global operational parameters, security protocols, and integration keys for the ACMS substrate.</p>
           </div>
 
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>2) Data Sources & Integrations</h3><span className={styles.cardIcon}>🔗</span></div>
-            <h4>Satellite Integration</h4>
-            <div className={styles.formGroup}><label>Connected Feeds</label><input placeholder="ISRO, NASA, IMD" defaultValue="ISRO, NASA, IMD"/></div>
-            <div style={{display:'flex',gap:'10px'}}>
-              <button className={styles.refreshBtn} onClick={()=>showNotification('Feeds connected', 'success')}>Connect</button>
-              <button className={styles.refreshBtn} onClick={()=>showNotification('Feeds disconnected', 'warning')}>Disconnect</button>
-            </div>
-            <h4 style={{marginTop:'10px'}}>Weather Stations & IoT</h4>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Add Station/Device</label><input placeholder="WX-102 / Gauge-7"/></div>
-              <div className={styles.formGroup}><label>Calibration Interval (days)</label><input type="number" defaultValue={15}/></div>
-              <div className={styles.formGroup}><label>API Keys</label><input placeholder="Weather, GIS, Gov DB"/></div>
-              <div className={styles.formGroup}><label>Refresh Frequency (min)</label><input type="number" defaultValue={5}/></div>
-            </div>
-            <button className={styles.refreshBtn} onClick={() => showNotification('Integrations saved', 'success')} style={{marginTop:'10px'}}>Save Section</button>
-          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
+             <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px' }}>
+                <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '25px' }}>Prediction Engine</h3>
+                <div style={{ display: 'grid', gap: '20px' }}>
+                   <div>
+                     <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '10px' }}>RAINFALL THRESHOLD (MM)</label>
+                     <input type="number" defaultValue={50} style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#FFF' }} />
+                   </div>
+                   <div>
+                     <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '10px' }}>RIVER LEVEL LIMIT (M)</label>
+                     <input type="number" defaultValue={5} style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#FFF' }} />
+                   </div>
+                </div>
+             </div>
 
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>3) AI & Model Settings</h3><span className={styles.cardIcon}>🧠</span></div>
-            <h4>Model Selection</h4>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Enabled Models</label><input placeholder="Rainfall-based, River-overflow, Combined" defaultValue="Combined"/></div>
-              <div className={styles.formGroup}><label>Re-train with Latest Data</label><button className={styles.refreshBtn} onClick={()=>showNotification('Model retraining queued', 'info')}>Re-train</button></div>
-            </div>
-            <h4 style={{marginTop:'10px'}}>Parameter Weights</h4>
-            <div className={styles.formGroup}><label>Rainfall Weight</label><input type="range" min="0" max="1" step="0.05" defaultValue={0.4}/></div>
-            <div className={styles.formGroup}><label>River Level Weight</label><input type="range" min="0" max="1" step="0.05" defaultValue={0.6}/></div>
-            <div className={styles.formGroup}><label>Simulation Mode</label><button className={styles.refreshBtn} onClick={()=>showNotification('Simulation started', 'success')}>Run Simulation</button></div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>4) Resource & Evacuation</h3><span className={styles.cardIcon}>🚁</span></div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Resource Templates</label><input placeholder="Boats, Food, Med Kits, Shelters" defaultValue="Boats, Food, Med Kits, Shelters"/></div>
-              <div className={styles.formGroup}><label>Upload GIS Maps</label><input type="file"/></div>
-              <div className={styles.formGroup}><label>Shelter Max Capacity</label><input type="number" defaultValue={500}/></div>
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>5) User & Access Control</h3><span className={styles.cardIcon}>🔐</span></div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Create Role</label><input placeholder="Rescue Coordinator"/></div>
-              <div className={styles.formGroup}><label>Permissions</label><input placeholder="Resources, Evacuation, Alerts"/></div>
-              <div className={styles.formGroup}><label>Enable 2FA</label><input type="checkbox" defaultChecked/></div>
-              <div className={styles.formGroup}><label>Password Policy</label><input placeholder="Expiry 90d, complexity high"/></div>
-              <div className={styles.formGroup}><label>Failed Login Limit</label><input type="number" defaultValue={5}/></div>
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>6) System Health & Performance</h3><span className={styles.cardIcon}>🖥️</span></div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>CPU Threshold (%)</label><input type="number" defaultValue={85}/></div>
-              <div className={styles.formGroup}><label>Memory Threshold (%)</label><input type="number" defaultValue={85}/></div>
-              <div className={styles.formGroup}><label>Backup Schedule</label><input placeholder="Daily 02:00" defaultValue="Daily 02:00"/></div>
-              <div className={styles.formGroup}><label>Recovery Protocol</label><input placeholder="Run DR-Plan v1"/></div>
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>7) Audit & Logging</h3><span className={styles.cardIcon}>🧾</span></div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Activity Logs</label><input type="checkbox" defaultChecked/></div>
-              <div className={styles.formGroup}><label>System Event Logs</label><input type="checkbox" defaultChecked/></div>
-              <div className={styles.formGroup}><label>Compliance</label><input placeholder="Gov/Audit retention policy"/></div>
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>8) Localization & Customization</h3><span className={styles.cardIcon}>🌐</span></div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Languages</label><input placeholder="English, Hindi, Assamese" defaultValue="English, Hindi"/></div>
-              <div className={styles.formGroup}><label>Timezone/Region</label><input placeholder="IST / Assam" defaultValue="IST"/></div>
-              <div className={styles.formGroup}><label>Branding</label><input placeholder="Upload logo / Govt branding"/></div>
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardHeader}><h3 className={styles.cardTitle}>9) Communication & Collaboration</h3><span className={styles.cardIcon}>📞</span></div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))',gap:'10px'}}>
-              <div className={styles.formGroup}><label>Emergency Contacts</label><input placeholder="Police, Hospitals, NDRF, NGOs"/></div>
-              <div className={styles.formGroup}><label>IVR Call Alerts</label><input placeholder="Provider/Access Token"/></div>
-              <div className={styles.formGroup}><label>Collaboration Tools</label><input placeholder="Slack, Teams, WhatsApp"/></div>
-            </div>
-            <button className={styles.refreshBtn} onClick={() => showNotification('All settings saved', 'success')} style={{marginTop:'10px'}}>Save All</button>
+             <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px' }}>
+                <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '25px' }}>Integrations</h3>
+                <div style={{ display: 'grid', gap: '20px' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+                      <span>Satellite India-1</span>
+                      <span style={{ color: '#10B981', fontWeight: 'bold' }}>CONNECTED</span>
+                   </div>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+                      <span>NDRF API Relay</span>
+                      <span style={{ color: '#10B981', fontWeight: 'bold' }}>ACTIVE</span>
+                   </div>
+                </div>
+             </div>
           </div>
         </div>
 
@@ -2570,205 +2686,376 @@ const AdminDashboard = () => {
         </div>
 
         <div id="weather" className={`${styles.contentSection} ${currentSection === 'weather' ? styles.active : ''}`}>
-          <h2 className={styles.sectionTitle}>Flood-Related Weather Dashboard</h2>
-          <div className={styles.dashboardGrid}>
-            {/* 1. Real-Time Weather Conditions */}
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Real-Time Weather Conditions</h3>
-                <span className={styles.cardIcon}>🌦️</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Rainfall Intensity (mm/hr)</span>
-                <span className={styles.metricValue}>{Math.round(10 + Math.random() * 40)}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Temperature (°C)</span>
-                <span className={styles.metricValue}>{(25 + Math.random() * 5).toFixed(1)}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Humidity (%)</span>
-                <span className={styles.metricValue}>{Math.round(70 + Math.random() * 20)}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Wind Speed (km/h)</span>
-                <span className={styles.metricValue}>{Math.round(10 + Math.random() * 30)}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Wind Direction</span>
-                <span className={styles.metricValue}>{['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.floor(Math.random() * 8)]}</span>
-              </div>
-            </div>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#00D1FF', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              ⛈️ METEOROLOGY RADAR
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>Environmental<br/>Intelligence</h1>
+            <p style={{ color: '#94A3B8', fontSize: '18px', maxWidth: '600px', marginTop: '15px' }}>Hyper-local weather telemetry and environmental sensor arrays for precision flood forecasting.</p>
+          </div>
 
-            {/* 2. Flood Risk Indicators */}
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Flood Risk Indicators</h3>
-                <span className={styles.cardIcon}>⚠️</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>River Water Level (m)</span>
-                <span className={styles.metricValue}>{(3 + Math.random() * 3).toFixed(2)}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Soil Moisture (%)</span>
-                <span className={styles.metricValue}>{Math.round(60 + Math.random() * 30)}</span>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Flood Warnings</span>
-                <span className={styles.metricValue}>{['Low', 'Medium', 'High'][Math.floor(Math.random() * 3)]} Risk</span>
-              </div>
-              <div style={{marginTop: '10px'}}>
-                <h4>District Alerts</h4>
-                <ul>
-                  <li>North District: High Risk</li>
-                  <li>South District: Medium Risk</li>
-                  <li>East District: Low Risk</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* 3. Forecasting & Predictions */}
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Forecasting & Predictions</h3>
-                <span className={styles.cardIcon}>📈</span>
-              </div>
-              <div>
-                <h4>Rainfall Forecast (mm - Next 24h)</h4>
-                <Line data={{
-                  labels: ['Now', '+3h', '+6h', '+12h', '+24h'],
-                  datasets: [{ label: 'Rainfall', data: [20, 30, 25, 40, 15], borderColor: '#00d4ff', backgroundColor: 'rgba(0,212,255,0.2)' }]
-                }} options={{ responsive: true, plugins: { legend: { display: false } } }} />
-              </div>
-              <div style={{marginTop: '10px'}}>
-                <h4>Flood Prediction</h4>
-                <p>Areas at risk: Riverbank, Central District (80% probability)</p>
-              </div>
-              <div className={styles.metric}>
-                <span className={styles.metricLabel}>Storm Alerts</span>
-                <span className={styles.metricValue}>Active Cyclone Warning</span>
-              </div>
-            </div>
-
-            {/* 4. Historical & Trend Data */}
-            <div className={styles.card}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Historical & Trend Data</h3>
-                <span className={styles.cardIcon}>📊</span>
-              </div>
-              <div>
-                <h4>Rainfall Trends (Last 7 Days)</h4>
-                <Bar data={{
-                  labels: ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'],
-                  datasets: [{ label: 'Rainfall (mm)', data: [50, 60, 40, 70, 30, 80, 55], backgroundColor: '#00ff88' }]
-                }} options={{ responsive: true }} />
-              </div>
-              <div style={{marginTop: '10px'}}>
-                <h4>Flood Frequency (Y-o-Y)</h4>
-                <Line data={{
-                  labels: ['2020', '2021', '2022', '2023', '2024'],
-                  datasets: [{ label: 'Flood Events', data: [5, 7, 4, 8, 6], borderColor: '#ffa726' }]
-                }} options={{ responsive: true }} />
-              </div>
-            </div>
-
-            {/* 5. Geospatial & Mapping Data */}
-            <div className={styles.card} style={{gridColumn: 'span 2'}}>
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>Geospatial & Mapping Data</h3>
-                <span className={styles.cardIcon}>🗺️</span>
-              </div>
-              <div style={{position: 'relative', height: '300px', border: '1px solid rgba(0,255,136,0.3)', borderRadius: '8px', overflow: 'hidden'}}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '25px' }}>
+             <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '30px' }}>
+                <h3 style={{ margin: '0 0 20px 0', fontSize: '18px', fontWeight: '800', color: '#00D1FF' }}>Live Conditions</h3>
+                <div style={{ display: 'grid', gap: '15px' }}>
+                   {[
+                     { l: 'RAINFALL', v: '42mm/h' },
+                     { l: 'WIND', v: '18km/h NW' },
+                     { l: 'HUMIDITY', v: '84%' }
+                   ].map((m, i) => (
+                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                        <span style={{ fontSize: '11px', color: '#94A3B8' }}>{m.l}</span>
+                        <span style={{ fontWeight: 'bold' }}>{m.v}</span>
+                     </div>
+                   ))}
+                </div>
+             </div>
+             <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '0', gridColumn: 'span 2', overflow: 'hidden' }}>
                 <iframe
-                  src="https://www.openstreetmap.org/export/embed.html?bbox=68.1766,6.7479,97.4025,35.5087&layer=mapnik&marker=20.5937,78.9629"
-                  style={{width: '100%', height: '100%', border: 'none'}}
-                  title="India Flood-Prone Zones Map"
+                  src="https://www.openstreetmap.org/export/embed.html?bbox=68.1766,6.7479,97.4025,35.5087&layer=mapnik"
+                  style={{ width: '100%', height: '300px', border: 'none', filter: 'invert(1) hue-rotate(180deg) brightness(0.8)' }}
+                  title="Environmental Map"
                 />
-                <div style={{position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(0,0,0,0.7)', padding: '8px 12px', borderRadius: '4px', fontSize: '12px'}}>
-                  🗺️ India - Flood-Prone Zones, Evacuation Routes, Shelters
+             </div>
+          </div>
+        </div>
+        
+        <div id="footprint" className={`${styles.contentSection} ${currentSection === 'footprint' ? styles.active : ''}`}>
+          <div style={{ marginBottom: '40px' }}>
+            <span style={{ color: '#10B981', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+              🍃 CLIMATE RESPONSIBILITY
+            </span>
+            <h1 style={{ fontSize: '56px', fontWeight: '900', margin: '0' }}>Eco-Impact<br/>Radar</h1>
+          </div>
+
+          <div className={styles.card} style={{ backgroundColor: 'rgba(21, 26, 35, 0.4)', padding: '40px', maxWidth: '800px' }}>
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
+                <div>
+                   <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '10px' }}>MONTHLY KWH</label>
+                   <input type="number" name="electricityKWh" value={footprintData.electricityKWh} onChange={handleInputChange} style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#FFF' }} />
                 </div>
-              </div>
-              <div style={{marginTop: '10px'}}>
-                <h4>Satellite Imagery</h4>
-                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                  <div style={{position: 'relative', height: '140px', border: '1px solid rgba(0,255,136,0.3)', borderRadius: '8px', overflow: 'hidden'}}>
-                    <iframe
-                      src="https://www.openstreetmap.org/export/embed.html?bbox=76.2,9.0,77.0,10.0&layer=mapnik"
-                      style={{width: '100%', height: '100%', border: 'none'}}
-                      title="Current Flood Spread"
-                    />
-                    <div style={{position: 'absolute', bottom: '5px', left: '5px', background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', fontSize: '11px'}}>
-                      Current Flood Spread
-                    </div>
-                  </div>
-                  <div style={{position: 'relative', height: '140px', border: '1px solid rgba(0,255,136,0.3)', borderRadius: '8px', overflow: 'hidden'}}>
-                    <iframe
-                      src="https://www.openstreetmap.org/export/embed.html?bbox=85.0,25.0,88.0,27.0&layer=mapnik"
-                      style={{width: '100%', height: '100%', border: 'none'}}
-                      title="Heat Map (Rainfall Intensity)"
-                    />
-                    <div style={{position: 'absolute', bottom: '5px', left: '5px', background: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '4px', fontSize: '11px'}}>
-                      Heat Map (Rainfall Intensity)
-                    </div>
-                  </div>
+                <div>
+                   <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#94A3B8', letterSpacing: '2px', marginBottom: '10px' }}>CAR MILEAGE</label>
+                   <input type="number" name="carMiles" value={footprintData.carMiles} onChange={handleInputChange} style={{ width: '100%', padding: '15px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', color: '#FFF' }} />
                 </div>
-              </div>
-            </div>
+             </div>
+             <button className={styles.refreshBtn} onClick={calculateFootprint} style={{ background: '#10B981', color: '#000', fontWeight: '900', width: '100%', padding: '20px' }}>ANALYZE IMPACT</button>
+             
+             {carbonFootprint > 0 && (
+               <div style={{ marginTop: '40px', textAlign: 'center', padding: '30px', background: 'rgba(16, 185, 129, 0.05)', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                  <div style={{ fontSize: '14px', color: '#94A3B8', marginBottom: '10px' }}>ESTIMATED CARBON FOOTPRINT</div>
+                  <div style={{ fontSize: '48px', fontWeight: '900', color: '#10B981' }}>{carbonFootprint.toFixed(2)} <span style={{ fontSize: '18px' }}>KG CO2E</span></div>
+               </div>
+             )}
           </div>
         </div>
 
-        <div id="footprint" className={`${styles.contentSection} ${currentSection === 'footprint' ? styles.active : ''}`}>
-          <div className={styles.card}>
-            <h2 className={styles.sectionTitle}>Carbon Footprint Calculator</h2>
-            <div className={styles.footprintForm}>
-              <div className={styles.formGroup}>
-                <label>Electricity Usage (kWh/month):</label>
-                <input
-                  type="number"
-                  name="electricityKWh"
-                  value={footprintData.electricityKWh}
-                  onChange={handleInputChange}
-                  min="0"
-                />
-              </div>
-              <div className={styles.formGroup}>
-                <label>Car Miles Driven (miles/month):</label>
-                <input
-                  type="number"
-                  name="carMiles"
-                  value={footprintData.carMiles}
-                  onChange={handleInputChange}
-                  min="0"
-                />
-              </div>
-              <div className={styles.formGroup}>
-                <label>Flight Miles (miles/year):</label>
-                <input
-                  type="number"
-                  name="flightsMiles"
-                  value={footprintData.flightsMiles}
-                  onChange={handleInputChange}
-                  min="0"
-                />
-              </div>
-              <div className={styles.formGroup}>
-                <label>
-                  <input
-                    type="checkbox"
-                    name="recycling"
-                    checked={footprintData.recycling}
-                    onChange={handleInputChange}
-                  /> Recycle Regularly
-                </label>
-              </div>
-              <button className={styles.refreshBtn} onClick={calculateFootprint}>Calculate Footprint</button>
-              <div className={styles.result}>
-                <h3>Your Estimated Carbon Footprint: {carbonFootprint.toFixed(2)} kg CO2e</h3>
-              </div>
+        {/* ─── Full NASA EONET Dedicated Section ─── */}
+        <div id="eonet" className={`${styles.contentSection} ${currentSection === 'eonet' ? styles.active : ''}`}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
+            <div>
+              <span style={{ color: '#EF4444', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                🛸 NASA EONET API · LIVE DATA
+              </span>
+              <h1 style={{ fontSize: '52px', fontWeight: '900', margin: '0 0 12px 0', lineHeight: '1.1' }}>Live Global<br/>Disasters</h1>
+              <p style={{ color: '#94A3B8', fontSize: '16px', maxWidth: '560px' }}>
+                Real-time natural disaster events sourced directly from the NASA Earth Observatory Natural Event Tracker (EONET) API.
+                {eonetLastFetched && <span style={{ color: '#64748B', fontSize: '13px', display: 'block', marginTop: '6px' }}>Last updated: {eonetLastFetched.toLocaleString()}</span>}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <button
+                onClick={fetchEonetEvents}
+                disabled={eonetLoading}
+                className={styles.refreshBtn}
+                style={{ background: eonetLoading ? 'rgba(239,68,68,0.2)' : 'linear-gradient(45deg,#EF4444,#F97316)', color: '#fff', fontWeight: '800' }}
+              >
+                {eonetLoading ? '⏳ Fetching...' : '🔄 Refresh Live Data'}
+              </button>
             </div>
           </div>
+
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '30px' }}>
+            {[
+              { cat: 'All', label: 'TOTAL EVENTS', color: '#E2E8F0', icon: '🌍' },
+              { cat: 'Floods', label: 'FLOODS', color: '#3B82F6', icon: '🌊' },
+              { cat: 'Wildfires', label: 'WILDFIRES', color: '#F97316', icon: '🔥' },
+              { cat: 'Severe Storms', label: 'SEVERE STORMS', color: '#A78BFA', icon: '⛈️' },
+              { cat: 'Landslides', label: 'LANDSLIDES', color: '#92400E', icon: '⛰️' },
+              { cat: 'Earthquakes', label: 'EARTHQUAKES', color: '#EF4444', icon: '🫨' },
+              { cat: 'Volcanoes', label: 'VOLCANOES', color: '#F59E0B', icon: '🌋' },
+              { cat: 'Drought', label: 'DROUGHT', color: '#D97706', icon: '☀️' },
+            ].map(({ cat, label, color, icon }) => (
+              <div
+                key={cat}
+                onClick={() => setEonetCategory(cat)}
+                style={{
+                  textAlign: 'center', padding: '20px 12px',
+                  background: eonetCategory === cat ? `rgba(${color === '#E2E8F0' ? '226,232,240' : color.replace('#','').match(/.{2}/g).map(h=>parseInt(h,16)).join(',')},0.15)` : 'rgba(255,255,255,0.02)',
+                  borderRadius: '16px',
+                  border: eonetCategory === cat ? `1px solid ${color}` : '1px solid rgba(255,255,255,0.07)',
+                  cursor: 'pointer', transition: 'all 0.2s'
+                }}
+              >
+                <div style={{ fontSize: '22px', marginBottom: '6px' }}>{icon}</div>
+                <div style={{ fontSize: '28px', fontWeight: '900', color }}>{cat === 'All' ? eonetEvents.length : (eonetCounts[cat] || 0)}</div>
+                <div style={{ fontSize: '9px', color: '#94A3B8', marginTop: '4px', fontWeight: '800', letterSpacing: '1px' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Category filter bar */}
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '24px' }}>
+            {EONET_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setEonetCategory(cat)}
+                style={{
+                  padding: '7px 16px', borderRadius: '40px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+                  border: eonetCategory === cat ? '1px solid #EF4444' : '1px solid rgba(255,255,255,0.1)',
+                  background: eonetCategory === cat ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                  color: eonetCategory === cat ? '#EF4444' : '#94A3B8',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          {/* Error state */}
+          {eonetError && (
+            <div className={styles.card} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚠️</div>
+              <p style={{ color: '#EF4444', fontWeight: '600' }}>{eonetError}</p>
+              <button onClick={fetchEonetEvents} className={styles.refreshBtn} style={{ marginTop: '16px', background: '#EF4444', color: '#fff' }}>Retry</button>
+            </div>
+          )}
+
+          {/* Loading skeleton */}
+          {eonetLoading && !eonetError && (
+            <div style={{ display: 'grid', gap: '16px' }}>
+              {[1,2,3,4].map(i => (
+                <div key={i} className={styles.card} style={{ height: '80px', background: 'rgba(255,255,255,0.02)', animation: 'pulse 1.5s infinite' }} />
+              ))}
+            </div>
+          )}
+
+          {/* Events list */}
+          {!eonetLoading && !eonetError && (
+            <div style={{ display: 'grid', gap: '14px' }}>
+              {filteredEonetEvents.length === 0 ? (
+                <div className={styles.card} style={{ textAlign: 'center', padding: '60px', background: 'rgba(21,26,35,0.4)' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>🛡️</div>
+                  <h3 style={{ fontSize: '22px', marginBottom: '8px' }}>No active events for "{eonetCategory}"</h3>
+                  <p style={{ color: '#94A3B8' }}>NASA EONET reports no open events in this category right now.</p>
+                </div>
+              ) : filteredEonetEvents.map((ev, i) => {
+                const cat = ev.categories?.[0]?.title || 'Unknown';
+                const latestGeom = ev.geometry?.[ev.geometry.length - 1];
+                const coords = latestGeom?.coordinates;
+                const date = latestGeom?.date;
+                const lat = coords?.[1];
+                const lon = coords?.[0];
+                const catColor = cat==='Floods'?'#3B82F6':cat==='Wildfires'?'#F97316':cat==='Severe Storms'?'#A78BFA':cat==='Earthquakes'?'#EF4444':cat==='Volcanoes'?'#F59E0B':cat==='Landslides'?'#92400E':cat==='Drought'?'#D97706':'#10B981';
+                const catIcon = cat==='Floods'?'🌊':cat==='Wildfires'?'🔥':cat==='Severe Storms'?'⛈️':cat==='Earthquakes'?'🫨':cat==='Volcanoes'?'🌋':cat==='Landslides'?'⛰️':cat==='Drought'?'☀️':'🌍';
+                return (
+                  <div key={ev.id || i} className={styles.card} style={{
+                    background: 'rgba(15,20,30,0.6)',
+                    borderLeft: `4px solid ${catColor}`,
+                    padding: '20px 24px',
+                    display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap',
+                    transition: 'all 0.2s'
+                  }}>
+                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: `rgba(0,0,0,0.3)`, border: `1px solid ${catColor}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', flexShrink: 0 }}>
+                      {catIcon}
+                    </div>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: '700', fontSize: '15px' }}>{ev.title}</span>
+                        <span style={{ padding: '2px 10px', borderRadius: '40px', background: `${catColor}22`, color: catColor, fontSize: '10px', fontWeight: '800', letterSpacing: '1px' }}>{cat.toUpperCase()}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                        {lat != null && lon != null && (
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>
+                            📍 {lat.toFixed(4)}°N, {lon.toFixed(4)}°E
+                          </span>
+                        )}
+                        {date && (
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>
+                            🕐 {new Date(date).toLocaleString()}
+                          </span>
+                        )}
+                        {ev.geometry?.length > 1 && (
+                          <span style={{ fontSize: '12px', color: '#64748B' }}>
+                            📊 {ev.geometry.length} data points
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {lat != null && lon != null && (
+                      <a
+                        href={`https://www.google.com/maps?q=${lat},${lon}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ padding: '8px 16px', borderRadius: '20px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#E2E8F0', fontSize: '12px', fontWeight: '600', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                      >
+                        🗺️ View Map
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Footer note */}
+          {!eonetLoading && filteredEonetEvents.length > 0 && (
+            <div style={{ marginTop: '30px', textAlign: 'center', color: '#475569', fontSize: '12px' }}>
+              Showing {filteredEonetEvents.length} open event{filteredEonetEvents.length !== 1 ? 's' : ''} · Data sourced from{' '}
+              <a href="https://eonet.gsfc.nasa.gov" target="_blank" rel="noopener noreferrer" style={{ color: '#EF4444', textDecoration: 'none', fontWeight: '700' }}>NASA EONET v3</a>
+            </div>
+          )}
         </div>
+
+        {/* ─── Open-Meteo Weather & Flood Risk Section ─── */}
+        <div id="weather-flood" className={`${styles.contentSection} ${currentSection === 'weather-flood' ? styles.active : ''}`}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px', flexWrap: 'wrap', gap: '20px' }}>
+            <div>
+              <span style={{ color: '#3B82F6', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', fontWeight: '800', letterSpacing: '2px', marginBottom: '10px' }}>
+                🌧️ OPEN-METEO API · LIVE PREDICTION
+              </span>
+              <h1 style={{ fontSize: '52px', fontWeight: '900', margin: '0 0 12px 0', lineHeight: '1.1' }}>Weather &amp;<br/>Flood Risk</h1>
+              <p style={{ color: '#94A3B8', fontSize: '16px', maxWidth: '580px' }}>
+                Real-time rainfall, temperature, wind speed and river discharge for flood-prone Indian cities — powered by Open-Meteo (no API key required).
+                {weatherLastFetched && <span style={{ color: '#64748B', fontSize: '13px', display: 'block', marginTop: '6px' }}>Last updated: {weatherLastFetched.toLocaleString()}</span>}
+              </p>
+            </div>
+            <button
+              onClick={fetchOpenMeteo}
+              disabled={weatherLoading}
+              className={styles.refreshBtn}
+              style={{ background: weatherLoading ? 'rgba(59,130,246,0.2)' : 'linear-gradient(45deg,#3B82F6,#06B6D4)', color: '#fff', fontWeight: '800' }}
+            >
+              {weatherLoading ? '⏳ Fetching...' : '🔄 Refresh Data'}
+            </button>
+          </div>
+
+          {/* Risk legend */}
+          <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '28px' }}>
+            {[{level:'HIGH',color:'#EF4444'},{level:'MODERATE',color:'F59E0B'},{level:'LOW',color:'#10B981'},{level:'MINIMAL',color:'#3B82F6'}].map(({level, color}) => (
+              <div key={level} style={{ display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#94A3B8' }}>
+                <div style={{ width:'9px', height:'9px', borderRadius:'50%', background: color.startsWith('#') ? color : `#${color}` }}></div>
+                {level} RISK
+              </div>
+            ))}
+            <div style={{ marginLeft:'auto', fontSize:'12px', color:'#475569' }}>Risk based on 24-h cumulative rainfall · &gt;20mm = HIGH · &gt;10mm = MODERATE · &gt;2mm = LOW</div>
+          </div>
+
+          {/* Error */}
+          {weatherError && (
+            <div className={styles.card} style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚠️</div>
+              <p style={{ color: '#EF4444', fontWeight: '600' }}>{weatherError}</p>
+              <button onClick={fetchOpenMeteo} className={styles.refreshBtn} style={{ marginTop: '16px', background: '#3B82F6', color: '#fff' }}>Retry</button>
+            </div>
+          )}
+
+          {/* Loading skeleton */}
+          {weatherLoading && !weatherError && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px,1fr))', gap: '20px' }}>
+              {FLOOD_CITIES.map(c => (
+                <div key={c.name} className={styles.card} style={{ height: '200px', background: 'rgba(255,255,255,0.02)' }} />
+              ))}
+            </div>
+          )}
+
+          {/* City cards */}
+          {!weatherLoading && !weatherError && weatherData.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px,1fr))', gap: '22px' }}>
+              {weatherData.map((city) => (
+                <div key={city.name} className={styles.card} style={{
+                  background: city.risk.bg,
+                  borderLeft: `4px solid ${city.risk.color}`,
+                  padding: '24px'
+                }}>
+                  {/* City header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+                    <div>
+                      <h3 style={{ margin: '0 0 4px 0', fontSize: '20px', fontWeight: '800' }}>{city.name}</h3>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>{city.lat.toFixed(2)}°N, {city.lon.toFixed(2)}°E</div>
+                    </div>
+                    <div style={{
+                      padding: '5px 14px', borderRadius: '40px',
+                      background: city.risk.color + '22',
+                      color: city.risk.color,
+                      fontSize: '11px', fontWeight: '900', letterSpacing: '1px'
+                    }}>
+                      {city.risk.level}
+                    </div>
+                  </div>
+
+                  {/* Metrics grid */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                    <div style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>🌧️ CURRENT RAIN</div>
+                      <div style={{ fontSize: '22px', fontWeight: '900', color: '#3B82F6' }}>{city.rain.toFixed(1)} <span style={{ fontSize: '12px' }}>mm/h</span></div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>☁️ 24H TOTAL</div>
+                      <div style={{ fontSize: '22px', fontWeight: '900', color: city.risk.color }}>{city.rain24h.toFixed(1)} <span style={{ fontSize: '12px' }}>mm</span></div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>🌡️ TEMPERATURE</div>
+                      <div style={{ fontSize: '22px', fontWeight: '900', color: '#F97316' }}>{city.temp !== null ? city.temp.toFixed(1) : '–'} <span style={{ fontSize: '12px' }}>°C</span></div>
+                    </div>
+                    <div style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px' }}>
+                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>🌪️ WIND</div>
+                      <div style={{ fontSize: '22px', fontWeight: '900', color: '#A78BFA' }}>{city.wind !== null ? city.wind.toFixed(1) : '–'} <span style={{ fontSize: '12px' }}>km/h</span></div>
+                    </div>
+                  </div>
+
+                  {/* River discharge */}
+                  <div style={{ padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '800', letterSpacing: '1px', marginBottom: '2px' }}>🌊 RIVER DISCHARGE</div>
+                      <div style={{ fontSize: '18px', fontWeight: '900', color: '#06B6D4' }}>
+                        {city.discharge !== null ? `${city.discharge.toFixed(1)} m³/s` : 'N/A'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: '11px', color: '#475569' }}>
+                      Open-Meteo<br/>Flood API
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Combined system note */}
+          {!weatherLoading && weatherData.length > 0 && (
+            <div className={styles.card} style={{ marginTop: '30px', background: 'rgba(15,20,30,0.5)', border: '1px solid rgba(255,255,255,0.07)', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#94A3B8' }}>⚡ COMBINED SITUATIONAL AWARENESS</div>
+                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                    <span>🛸</span>
+                    <span style={{ color: '#EF4444', fontWeight: '700' }}>NASA EONET</span>
+                    <span style={{ color: '#475569' }}>→ Real ongoing disaster events</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                    <span>🌧️</span>
+                    <span style={{ color: '#3B82F6', fontWeight: '700' }}>Open-Meteo</span>
+                    <span style={{ color: '#475569' }}>→ Rain & flood risk prediction</span>
+                  </div>
+                </div>
+                <button onClick={() => showSection('eonet')} style={{ padding: '8px 18px', borderRadius: '20px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#EF4444', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>View EONET →</button>
+              </div>
+            </div>
+          )}
+        </div>
+
       </main>
     </div>
   );

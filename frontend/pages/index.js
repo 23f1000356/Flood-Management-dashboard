@@ -1,35 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import styles from './index.module.css';
 
 const AutonomousClimateSystem = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0);
   const [scrollY, setScrollY] = useState(0);
-  const [backgroundImage, setBackgroundImage] = useState('');
-  const parallaxRef = useRef(null);
-  const sliderIntervalRef = useRef(null);
 
-  const slides = [
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.pageYOffset);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const showcaseCards = [
     {
-      image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&h=600&fit=crop",
-      title: "Real-time Climate Monitoring",
-      description: "Advanced satellite imaging and sensor networks"
+      image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
+      title: "Glacier Monitoring",
+      desc: "Real-time tracking of melting rates and environmental impact indices."
     },
     {
-      image: "https://images.unsplash.com/photo-1504567961542-e24d9439a724?w=1200&h=600&fit=crop",
-      title: "AI Weather Prediction",
-      description: "LSTM neural networks for accurate forecasting"
+      image: "/images/fire.jpg",
+      title: "Wildfire Prediction",
+      desc: "AI-driven algorithms predicting risk zones with 94% accuracy."
     },
     {
-      image: "https://images.unsplash.com/photo-1574263867128-a3d5c1b1debc?w=1200&h=600&fit=crop",
-      title: "Disaster Response",
-      description: "Automated resource allocation and evacuation planning"
-    },
-    {
-      image: "https://images.unsplash.com/photo-1569163139394-de4e4f43e4e5?w=1200&h=600&fit=crop",
-      title: "Recovery Support",
-      description: "AI-powered recovery planning and resource optimization"
+      image: "/images/flood-defence.jpg",
+      title: "Flood Defense",
+      desc: "Autonomous resource allocation system for rapid flood response."
     }
   ];
 
@@ -37,103 +34,24 @@ const AutonomousClimateSystem = () => {
     {
       icon: "🧠",
       title: "Disaster Prediction Agent",
-      description: "LSTM Neural Network for time-series weather pattern analysis with multi-feature input processing 15 weather parameters.",
-      details: ["Real-time risk assessment", "Confidence scores", "Continuous learning"]
+      description: "LSTM Neural Network for time-series weather pattern analysis with multi-feature input processing."
     },
     {
       icon: "🛰️",
       title: "Monitoring Agent", 
-      description: "CNN-based satellite image analysis for fire/flood detection with social media monitoring using advanced NLP.",
-      details: ["Satellite imagery", "Social media tracking", "Multi-source fusion"]
+      description: "CNN-based satellite image analysis for disaster detection with social media monitoring."
     },
     {
       icon: "⚙️",
       title: "Resource Allocation Agent",
-      description: "Reinforcement Learning (Q-learning) for optimal resource deployment with dynamic management capabilities.",
-      details: ["Q-learning optimization", "Dynamic management", "Distance-based routing"]
+      description: "Reinforcement Learning for optimal resource deployment across affected regions."
     },
     {
       icon: "🗺️",
-      title: "Evacuation Planning Agent",
-      description: "Dijkstra's algorithm for optimal route planning with multi-phase evacuation and capacity management systems.",
-      details: ["Optimal routing", "Safe zone identification", "Traffic-aware updates"]
-    },
-    {
-      icon: "🔧",
-      title: "Recovery Support Agent",
-      description: "AI-powered recovery planning with phase-based approach, cost estimation, and stakeholder communication.",
-      details: ["Recovery planning", "Cost estimation", "Timeline optimization"]
-    },
-    {
-      icon: "📊",
-      title: "Simulation Agent",
-      description: "Synthetic scenario generation for training and testing with GAN-like disaster progression modeling capabilities.",
-      details: ["Scenario generation", "GAN modeling", "Training simulations"]
+      title: "Relief Management",
+      description: "End-to-end management of shelters, volunteers, and emergency supplies."
     }
   ];
-
-  // Array of background image URLs (non-orange themes)
-  const backgroundImages = [
-    "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1200&h=600&fit=crop", // Mountain landscape
-    "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=1200&h=600&fit=crop", // Forest
-    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=600&fit=crop", // Ocean
-    "https://images.unsplash.com/photo-1501854140801-50d01698950b?w=1200&h=600&fit=crop", // Snowy landscape
-    "https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1200&h=600&fit=crop"  // Cloudy sky
-  ];
-
-  // Parallax effect and random background image on mount
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrollY(window.pageYOffset);
-    };
-
-    // Set random background image on page load
-    const randomImage = backgroundImages[Math.floor(Math.random() * backgroundImages.length)];
-    setBackgroundImage(randomImage);
-
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Auto slider
-  useEffect(() => {
-    const startSlider = () => {
-      sliderIntervalRef.current = setInterval(() => {
-        setCurrentSlide(prev => (prev + 1) % slides.length);
-      }, 5000);
-    };
-
-    startSlider();
-
-    return () => {
-      if (sliderIntervalRef.current) {
-        clearInterval(sliderIntervalRef.current);
-      }
-    };
-  }, [slides.length]);
-
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-
-  const handleSlideChange = (index) => {
-    setCurrentSlide(index);
-    if (sliderIntervalRef.current) {
-      clearInterval(sliderIntervalRef.current);
-    }
-    // Restart auto slider
-    sliderIntervalRef.current = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % slides.length);
-    }, 5000);
-  };
-
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-    setIsMenuOpen(false);
-  };
 
   return (
     <div className={styles.container}>
@@ -141,196 +59,166 @@ const AutonomousClimateSystem = () => {
       <nav className={styles.navbar}>
         <div className={styles.navContainer}>
           <div className={styles.navLogo}>
-            <span className={styles.logoIcon}>🌱</span>
+            <span className={styles.logoIcon}>🌲</span>
             <span>ACMS</span>
           </div>
-          <ul className={`${styles.navMenu} ${isMenuOpen ? styles.active : ''}`}>
-            
-            <li className={styles.navItem}>
-              <a href="#weather" className={styles.navLink} onClick={() => scrollToSection('weather')}>Weather</a>
-            </li>
-            <li className={styles.navItem}>
-              <a href="#footprint" className={styles.navLink} onClick={() => scrollToSection('footprint')}>Footprint Calculator</a>
-            </li>
-            <li className={styles.navItem}>
-              <a href="#features" className={styles.navLink} onClick={() => scrollToSection('features')}>Features</a>
-            </li>
-            <li className={styles.navItem}>
-              <Link href="/login" className={`${styles.navLink} ${styles.loginBtn}`}>Login</Link>
-            </li>
-            <li className={styles.navItem}>
-              <Link href="/signup" className={`${styles.navLink} ${styles.loginBtn}`}>Sign Up</Link>
-            </li>
+          <ul className={styles.navMenu}>
+            <li className={styles.navItem}><a href="#home" className={styles.navLink}>Home</a></li>
+            <li className={styles.navItem}><a href="#features" className={styles.navLink}>Solutions</a></li>
+            <li className={styles.navItem}><a href="#about" className={styles.navLink}>About</a></li>
+            <li className={styles.navItem}><Link href="/login" className={styles.navLink}>Login</Link></li>
+            <li className={styles.navItem}><Link href="/signup" className={`${styles.navLink} ${styles.btnPrimary}`} style={{padding: '10px 25px', color: '#000'}}>Get Started</Link></li>
           </ul>
-          <div className={`${styles.hamburger} ${isMenuOpen ? styles.active : ''}`} onClick={toggleMenu}>
-            <span className={styles.bar}></span>
-            <span className={styles.bar}></span>
-            <span className={styles.bar}></span>
-          </div>
         </div>
       </nav>
 
-      {/* Hero Section with Parallax */}
+      {/* Hero Section */}
       <section className={styles.hero} id="home">
         <div 
           className={styles.parallaxBg}
-          ref={parallaxRef}
-          style={{ 
-            transform: `translate3d(0, ${scrollY * -0.5}px, 0)`,
-            backgroundImage: `url(${backgroundImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-          }}
+          style={{ transform: `translate3d(0, ${scrollY * 0.4}px, 0)` }}
         ></div>
+        <div className={styles.heroOverlay}></div>
+        
         <div className={styles.heroContent}>
-          <h1 className={styles.heroTitle}>Autonomous Climate Mitigation System</h1>
-          <p className={styles.heroSubtitle}>
-            Advanced AI-powered solutions for climate monitoring, disaster prediction, and environmental protection
-          </p>
-          <div className={styles.heroButtons}>
-            <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => scrollToSection('features')}>Explore System</button>
-            <button className={`${styles.btn} ${styles.btnSecondary}`}>Learn More</button>
-          </div>
-        </div>
-        <div className={styles.scrollIndicator}>
-          <div className={styles.scrollArrow}></div>
+          <motion.div 
+            className={styles.heroGlassCard}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <motion.h1 
+              className={styles.heroTitle}
+              initial={{ opacity: 0, letterSpacing: '-10px' }}
+              animate={{ opacity: 1, letterSpacing: '-2px' }}
+              transition={{ duration: 1 }}
+            >
+              <span>CLIMATE YOU</span>
+              <span>CAN CHANGE.</span>
+            </motion.h1>
+            <p className={styles.heroSubtitle}>
+              Climate change is a real issue people tend to completely overlook. 
+              Our AI-driven mitigation system helps you win this battle before it's too late. 
+              Join the future of environmental protection.
+            </p>
+            <div className={styles.heroButtons}>
+              <Link href="/signup">
+                <button className={styles.btnPrimary} style={{padding: '20px 50px', borderRadius: '100px', fontWeight: '800', border: 'none', cursor: 'pointer', backgroundColor: '#10B981'}}>ACTION PLAN</button>
+              </Link>
+            </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* Image Slider */}
-      <section className={styles.imageSlider}>
-        <div className={styles.sliderContainer}>
-          {slides.map((slide, index) => (
-            <div 
-              key={index}
-              className={`${styles.slide} ${index === currentSlide ? styles.active : ''}`}
-            >
-              <img src={slide.image} alt={slide.title} />
-              <div className={styles.slideContent}>
-                <h3>{slide.title}</h3>
-                <p>{slide.description}</p>
-              </div>
+      {/* Showcase Cards (Floating) */}
+      <div className={styles.showcaseGrid}>
+        {showcaseCards.map((card, i) => (
+          <motion.div 
+            key={i}
+            className={styles.showcaseCard}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: i * 0.2 }}
+          >
+            <img src={card.image} className={styles.showcaseImg} alt={card.title} />
+            <div className={styles.showcaseContent}>
+              <p style={{ color: '#10B981', fontWeight: 'bold', fontSize: '12px', marginBottom: '10px' }}>CASE STUDY 0{i+1}</p>
+              <h3>{card.title}</h3>
+              <p>{card.desc}</p>
+              <span className={styles.learnMore}>LEARN MORE ↗</span>
             </div>
-          ))}
-        </div>
-        <div className={styles.sliderNav}>
-          {slides.map((_, index) => (
-            <button 
-              key={index}
-              className={`${styles.navDot} ${index === currentSlide ? styles.active : ''}`}
-              onClick={() => handleSlideChange(index)}
-            ></button>
-          ))}
-        </div>
-      </section>
+          </motion.div>
+        ))}
+      </div>
 
       {/* Features Section */}
-      <section className={styles.featuresSection} id="features">
-        <div className={styles.container}>
-          <h2 className={styles.sectionTitle}>🔥 Complete ACMS Features</h2>
+      <section className={styles.section} id="features">
+        <div className={styles.navContainer}>
+          <h2 className={styles.sectionTitle}>Precision Mitigation <span>Agents</span></h2>
           <div className={styles.featuresGrid}>
-            {features.map((feature, index) => (
-              <div key={index} className={styles.featureCard}>
-                <div className={styles.featureIcon}>
-                  <span>{feature.icon}</span>
+            {features.map((f, i) => (
+              <motion.div 
+                key={i}
+                className={styles.featureCard}
+                initial={{ opacity: 0, x: i % 2 === 0 ? -30 : 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+              >
+                <div className={styles.featureIcon}>{f.icon}</div>
+                <div>
+                  <h3 style={{ fontSize: '24px', marginBottom: '15px' }}>{f.title}</h3>
+                  <p style={{ color: '#94A3B8', lineHeight: '1.6' }}>{f.description}</p>
                 </div>
-                <div className={styles.featureContent}>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.description}</p>
-                  <div className={styles.featureDetails}>
-                    {feature.details.map((detail, idx) => (
-                      <span key={idx}>{detail}</span>
-                    ))}
-                  </div>
-                  <div className={styles.featureArrow}>
-                    <span>→</span>
-                  </div>
-                </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Wave Effect Section */}
-      <section className={styles.waveSection}>
-        <div className={styles.waveContainer}>
-          <div className={`${styles.wave} ${styles.wave1}`}></div>
-          <div className={`${styles.wave} ${styles.wave2}`}></div>
-          <div className={`${styles.wave} ${styles.wave3}`}></div>
-        </div>
-        <div className={styles.waveContent}>
-          <h2>Join the Climate Revolution</h2>
-          <p>Be part of the solution with our advanced autonomous climate mitigation system</p>
-          <button className={`${styles.btn} ${styles.btnWave}`}>Get Started</button>
+      {/* Sustainability Section (Image/Text side by side) */}
+      <section className={styles.section} style={{ background: '#090B0F' }}>
+        <div className={styles.navContainer} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '100px', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ fontSize: '48px', fontWeight: '900', marginBottom: '30px' }}>Building a Greener Tomorrow, Today</h2>
+            <p style={{ color: '#94A3B8', fontSize: '18px', lineHeight: '1.8', marginBottom: '40px' }}>
+              ACMS is built on the belief that small changes lead to powerful transformations. 
+              We create accessible tools, resources, and programs that help individuals and nations 
+              live sustainably. Together, we can restore the balance of our planet.
+            </p>
+            <button className={styles.btnPrimary} style={{padding: '18px 40px', borderRadius: '100px', fontWeight: '800', border: 'none', cursor: 'pointer', backgroundColor: '#10B981'}}>OUR MISSION</button>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <motion.img 
+              src="https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800&q=80" 
+              style={{ width: '100%', borderRadius: '40px' }}
+              initial={{ scale: 0.9, opacity: 0 }}
+              whileInView={{ scale: 1, opacity: 1 }}
+            />
+            <div style={{ position: 'absolute', bottom: '-30px', right: '-30px', background: '#10B981', padding: '40px', borderRadius: '30px', color: '#000', fontWeight: '900', fontSize: '24px' }}>
+              85% REDUCTION<br/><span style={{ fontSize: '14px', fontWeight: '500' }}>IN RESPONSE TIME</span>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
       <footer className={styles.footer}>
         <div className={styles.footerContainer}>
-          <div className={styles.footerSection}>
-            <h3>Autonomous Climate Mitigation System</h3>
-            <p>ACMS explores the unknown in climate science, innovates for the benefit of humanity, and inspires the world through discovery.</p>
-            <div className={styles.footerMission}>
-              <a href="#">About ACMS's Mission</a>
-            </div>
-            <div className={styles.footerJoin}>
-              <a href="#" className={styles.joinBtn}>
-                <span>Join Us</span>
-                <span className={styles.joinArrow}>→</span>
-              </a>
-            </div>
+          <div className={styles.footerColumn}>
+            <div className={styles.footerLogo}>ACMS.</div>
+            <p style={{ color: '#94A3B8', maxWidth: '400px', lineHeight: '1.8' }}>
+              ACMS is a real-time climate monitoring and autonomous mitigation system 
+              designed to protect the world's most vulnerable regions.
+            </p>
           </div>
-          <div className={styles.footerLinks}>
-            <div className={styles.footerColumn}>
-              <h4>Home</h4>
-              <ul>
-                <li><a href="#">Climate Monitoring</a></li>
-                <li><a href="#">Weather Prediction</a></li>
-                <li><a href="#">Disaster Response</a></li>
-                <li><a href="#">ACMS+ <span className={styles.liveBadge}>LIVE</span></a></li>
-              </ul>
-            </div>
-
-            <div className={styles.footerColumn}>
-              <h4>Climate Solutions</h4>
-              <ul>
-                <li><a href="#">Earth Monitoring</a></li>
-                <li><a href="#">Climate Systems</a></li>
-                <li><a href="#">Environmental Data</a></li>
-                <li><a href="#">Science Research</a></li>
-              </ul>
-            </div>
-
-            <div className={styles.footerColumn}>
-              <h4>Technology</h4>
-              <ul>
-                <li><a href="#">AI & Machine Learning</a></li>
-                <li><a href="#">Satellite Technology</a></li>
-                <li><a href="#">Data Analytics</a></li>
-                <li><a href="#">Learning Resources</a></li>
-              </ul>
-            </div>
+          <div className={styles.footerColumn}>
+            <h4>Platform</h4>
+            <ul>
+              <li><Link href="/disaster-prediction-agent">Prediction</Link></li>
+              <li><Link href="/monitoring-agent">Monitoring</Link></li>
+              <li><Link href="/resource">Resources</Link></li>
+            </ul>
           </div>
-
-          <div className={styles.footerSocial}>
-            <h4>Follow ACMS</h4>
-            <div className={styles.socialIcons}>
-              <a href="#" className={styles.socialIcon}>📘</a>
-              <a href="#" className={styles.socialIcon}>📷</a>
-              <a href="#" className={styles.socialIcon}>🐦</a>
-              <a href="#" className={styles.socialIcon}>📺</a>
-            </div>
-            <div className={styles.footerExtra}>
-            </div>
+          <div className={styles.footerColumn}>
+            <h4>Company</h4>
+            <ul>
+              <li><a href="#">Our Story</a></li>
+              <li><a href="#">Contact</a></li>
+              <li><a href="#">Privacy</a></li>
+            </ul>
+          </div>
+          <div className={styles.footerColumn}>
+            <h4>Connect</h4>
+            <ul>
+              <li><a href="#">Twitter</a></li>
+              <li><a href="#">LinkedIn</a></li>
+              <li><a href="#">GitHub</a></li>
+            </ul>
           </div>
         </div>
-
-        <div className={styles.footerBottom}>
-          <div className={styles.container}>
-            <p>&copy; 2025 Autonomous Climate Mitigation System. All rights reserved.</p>
-          </div>
+        <div style={{ textAlign: 'center', marginTop: '100px', padding: '30px 0', borderTop: '1px solid rgba(255,255,255,0.05)', color: '#475569', fontSize: '14px' }}>
+          © 2026 ACMS. All rights Reserved. Designed for the Planet.
         </div>
       </footer>
     </div>

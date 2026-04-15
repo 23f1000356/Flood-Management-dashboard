@@ -42,6 +42,12 @@ import json
 # TensorFlow imports removed to save memory (unused)
 import joblib  # For model persistence
 from typing import Optional, List
+from celery import Celery
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -74,6 +80,59 @@ def read_root():
 
 sio = socketio.AsyncServer(async_mode='asgi')
 app.mount("/ws", socketio.ASGIApp(sio))
+
+# Celery Configuration
+celery_worker = Celery(
+    'tasks',
+    broker=os.getenv('REDIS_URL', 'redis://localhost:6379/0'),
+    backend=os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+)
+
+# Mail Configuration
+conf = ConnectionConfig(
+    MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
+    MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
+    MAIL_FROM=os.getenv("MAIL_FROM"),
+    MAIL_PORT=int(os.getenv("MAIL_PORT", 587)),
+    MAIL_SERVER=os.getenv("MAIL_SERVER"),
+    MAIL_FROM_NAME=os.getenv("MAIL_FROM_NAME"),
+    MAIL_STARTTLS=True,
+    MAIL_SSL_TLS=False,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True,
+    TEMPLATE_FOLDER=None
+)
+
+@celery_worker.task(name="send_email_alert_task")
+def send_email_alert_task(subject: str, recipients: List[str], body: str):
+    """
+    Background task to send alert emails using FastAPI-Mail.
+    Always creates a fresh event loop via asyncio.run() to avoid 
+    'no current event loop' errors in Celery worker threads.
+    """
+    import asyncio
+    import logging
+    task_logger = logging.getLogger("celery.task")
+
+    async def _send():
+        task_logger.info(f"📧 [ALERT EMAIL] Subject: {subject}")
+        task_logger.info(f"📋 [ALERT EMAIL] Sending to {len(recipients)} registered user(s):")
+        for i, email in enumerate(recipients, 1):
+            task_logger.info(f"   [{i}/{len(recipients)}] → {email}")
+
+        message = MessageSchema(
+            subject=subject,
+            recipients=recipients,
+            body=body,
+            subtype=MessageType.html
+        )
+        fm = FastMail(conf)
+        await fm.send_message(message)
+        task_logger.info(f"✅ [ALERT EMAIL] Successfully delivered to all {len(recipients)} user(s).")
+
+    # Always create a fresh event loop — safe in Celery worker threads
+    asyncio.run(_send())
+    return f"Sent to {len(recipients)} users"
 
 # Database setup
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -338,6 +397,13 @@ class FootprintData(BaseModel):
     car_miles: float
     flights_miles: float
     recycling: bool
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    address: Optional[str] = None
+    medical_conditions: Optional[str] = None
 
 class WildfireInput(BaseModel):
     temperature: float
@@ -1375,6 +1441,22 @@ async def signup(data: SignupData, db: Session = Depends(get_db)):
     await notify_alert(f"New user signed up: {data.username}", 'info')
     return JSONResponse({"message": "Account created successfully!"})
 
+@app.put("/api/users/{user_id}")
+async def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(id=user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if data.name is not None: user.name = data.name
+    if data.phone is not None: user.phone = data.phone
+    if data.emergency_contact is not None: user.emergency_contact = data.emergency_contact
+    if data.address is not None: user.address = data.address
+    if data.medical_conditions is not None: user.medical_conditions = data.medical_conditions
+    
+    db.commit()
+    db.refresh(user)
+    return user
+
 @app.get("/api/alerts")
 async def list_alerts(db: Session = Depends(get_db)):
     alerts = db.query(Alert).order_by(Alert.time.desc()).all()
@@ -1423,6 +1505,117 @@ async def send_alert(data: AlertCreate, db: Session = Depends(get_db)):
             await notify_alert(f"{title}: {message}", 'error' if risk == 'high' else ('warning' if risk == 'moderate' else 'info'))
         except Exception as ne:
             logger.warning(f"notify_alert failed (non-fatal): {ne}")
+
+        # Trigger Celery Email Task — send to all role='user' registered citizens
+        try:
+            from datetime import datetime as dt
+            citizen_users = db.query(User).filter(User.role == 'user').all()
+            valid_recipients = [(u.name, u.email) for u in citizen_users if u.email]
+
+            if valid_recipients:
+                recipient_emails = [email for _, email in valid_recipients]
+
+                # Log each recipient to backend terminal
+                logger.info(f"📣 Alert broadcast initiated → {len(valid_recipients)} registered citizen(s):")
+                for i, (name, email) in enumerate(valid_recipients, 1):
+                    logger.info(f"   [{i}] {name} → {email}")
+
+                risk_color    = '#DC2626' if risk == 'high' else ('#D97706' if risk == 'moderate' else '#059669')
+                risk_bg       = '#FEF2F2' if risk == 'high' else ('#FFFBEB' if risk == 'moderate' else '#F0FDF4')
+                risk_icon     = '🚨' if risk == 'high' else ('⚠️' if risk == 'moderate' else '✅')
+                risk_label    = risk.upper()
+                sent_at       = dt.now().strftime('%d %b %Y, %I:%M %p IST')
+
+                email_subject = f"{risk_icon} [ACMS EMERGENCY ALERT] {title} — Immediate Action Required"
+
+                email_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ACMS Emergency Alert</title>
+</head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F1F5F9;padding:30px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.1);">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:{risk_color};padding:30px 40px;text-align:center;">
+            <div style="font-size:48px;margin-bottom:10px;">{risk_icon}</div>
+            <h1 style="color:white;margin:0;font-size:26px;font-weight:800;letter-spacing:1px;">EMERGENCY FLOOD ALERT</h1>
+            <div style="color:rgba(255,255,255,0.85);font-size:13px;margin-top:8px;">Autonomous Climate Management System (ACMS)</div>
+          </td>
+        </tr>
+
+        <!-- Risk Badge -->
+        <tr>
+          <td style="background:{risk_bg};padding:16px 40px;text-align:center;border-bottom:1px solid #E2E8F0;">
+            <span style="display:inline-block;background:{risk_color};color:white;padding:6px 20px;border-radius:30px;font-size:13px;font-weight:800;letter-spacing:2px;">
+              RISK LEVEL: {risk_label}
+            </span>
+            &nbsp;&nbsp;
+            <span style="font-size:13px;color:#64748B;">Issued: {sent_at}</span>
+          </td>
+        </tr>
+
+        <!-- Main Content -->
+        <tr>
+          <td style="padding:35px 40px;">
+            <h2 style="color:#1E293B;margin:0 0 6px 0;font-size:22px;">{title}</h2>
+            <p style="color:#64748B;font-size:14px;margin:0 0 25px 0;">This is an automated alert issued by the ACMS Flood Management Platform.</p>
+
+            <div style="background:{risk_bg};border-left:5px solid {risk_color};border-radius:8px;padding:20px 24px;margin-bottom:25px;">
+              <p style="margin:0;color:#1E293B;font-size:15px;line-height:1.7;"><strong>Alert Message:</strong><br/>{message}</p>
+            </div>
+
+            <!-- Action Steps -->
+            <h3 style="color:#1E293B;font-size:16px;margin:0 0 12px 0;">⚡ Immediate Action Steps</h3>
+            <table cellpadding="0" cellspacing="0" width="100%">
+              <tr>
+                <td style="padding:8px 0;border-bottom:1px solid #F1F5F9;color:#334155;font-size:14px;">🏃 Evacuate to the nearest designated shelter if instructed</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 0;border-bottom:1px solid #F1F5F9;color:#334155;font-size:14px;">📱 Keep your phone charged and monitor official updates</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 0;border-bottom:1px solid #F1F5F9;color:#334155;font-size:14px;">🆘 Submit an SOS request via the ACMS User Dashboard if stranded</td>
+              </tr>
+              <tr>
+                <td style="padding:8px 0;color:#334155;font-size:14px;">🏠 Avoid flood-prone areas, riverbanks, and low-lying roads</td>
+              </tr>
+            </table>
+
+            <!-- CTA Button -->
+            <div style="text-align:center;margin:30px 0;">
+              <a href="http://localhost:3000/UserDashboard" style="background:{risk_color};color:white;text-decoration:none;padding:14px 40px;border-radius:30px;font-size:15px;font-weight:700;display:inline-block;">
+                Open ACMS Dashboard →
+              </a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#F8FAFC;padding:20px 40px;border-top:1px solid #E2E8F0;text-align:center;">
+            <p style="color:#94A3B8;font-size:12px;margin:0;">This is an automated emergency notification from the <strong>ACMS Flood Management System</strong>.<br/>
+            Do not reply to this email. For support, contact your local disaster management authority.</p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+                send_email_alert_task.delay(email_subject, recipient_emails, email_body)
+                logger.info(f"✅ Email alert queued successfully for {len(valid_recipients)} citizen(s).")
+            else:
+                logger.warning("⚠️ No registered citizen users found to send alert emails.")
+        except Exception as ee:
+            logger.error(f"Failed to queue email task: {ee}")
 
         return JSONResponse({
             "message": "Alert sent",
@@ -2546,6 +2739,117 @@ async def reject_financial_aid(aid_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error rejecting aid: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── SMS Alert via Fast2SMS (Free India SMS API) ───────────────────────────
+
+def normalize_phone(raw: str) -> Optional[str]:
+    """Normalize an Indian phone number to exactly 10 digits."""
+    if not raw:
+        return None
+    p = raw.strip().replace(' ', '').replace('-', '').replace('+', '')
+    if len(p) == 12 and p.startswith('91'):
+        p = p[2:]  # strip +91
+    if len(p) == 11 and p.startswith('0'):
+        p = p[1:]  # strip leading 0
+    return p if (len(p) == 10 and p.isdigit()) else None
+
+class SMSAlertRequest(BaseModel):
+    message: str
+    # Send to a specific number (for testing). Overrides DB lookup.
+    test_number: Optional[str] = None
+    # Or provide a custom list. If both empty, sends to all users.
+    phone_numbers: Optional[List[str]] = None
+
+@app.post("/api/send-sms-alert")
+async def send_sms_alert(data: SMSAlertRequest, db: Session = Depends(get_db)):
+    """
+    Send an SMS alert via Fast2SMS.
+    Priority: test_number > phone_numbers list > all users in DB.
+    """
+    import httpx
+
+    api_key = os.getenv("FAST2SMS_API_KEY", "")
+    if not api_key or api_key == "YOUR_FAST2SMS_API_KEY_HERE":
+        raise HTTPException(
+            status_code=503,
+            detail="Fast2SMS API key not configured. Add FAST2SMS_API_KEY to your .env file."
+        )
+
+    # --- Resolve phone list ---
+    if data.test_number:
+        normalized = normalize_phone(data.test_number)
+        if not normalized:
+            raise HTTPException(status_code=400, detail=f"'{data.test_number}' is not a valid 10-digit Indian number.")
+        phones = [normalized]
+    elif data.phone_numbers:
+        phones = [normalize_phone(p) for p in data.phone_numbers]
+        phones = [p for p in phones if p]  # drop invalids
+    else:
+        users = db.query(User).all()  # include all roles
+        phones = [normalize_phone(u.phone) for u in users if u.phone]
+        phones = [p for p in phones if p]
+
+    if not phones:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid 10-digit phone numbers found. Register users with phone numbers, or use the 'test_number' field."
+        )
+
+    # Fast2SMS supports up to 200 numbers per request, sent as comma-separated
+    BATCH = 200
+    results = []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for i in range(0, len(phones), BATCH):
+            batch = phones[i:i + BATCH]
+            numbers_str = ",".join(batch)
+            try:
+                resp = await client.post(
+                    "https://www.fast2sms.com/dev/bulkV2",
+                    headers={"authorization": api_key},
+                    data={
+                        "route": "q",          # Quick Transactional route (free tier)
+                        "message": data.message,
+                        "language": "english",
+                        "flash": "0",
+                        "numbers": numbers_str,
+                    }
+                )
+                resp_json = resp.json()
+                results.append(resp_json)
+                logger.info(f"SMS batch {i//BATCH + 1}: {resp_json}")
+
+                # Fast2SMS returns status_code:999 for account/balance errors
+                f2s_status = resp_json.get("status_code") or resp_json.get("status")
+                f2s_msg = resp_json.get("message", "")
+                if f2s_status == 999 or (isinstance(f2s_status, str) and f2s_status != "200"):
+                    raise HTTPException(
+                        status_code=402,
+                        detail=f"Fast2SMS error: {f2s_msg}"
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"SMS batch error: {e}")
+                raise HTTPException(status_code=500, detail=f"SMS send failed: {str(e)}")
+
+    success = any(r.get("return") is True for r in results)
+    return JSONResponse({
+        "message": f"SMS alert sent to {len(phones)} number(s) successfully.",
+        "recipients": len(phones),
+        "success": success,
+        "details": results
+    })
+
+
+@app.get("/api/users/phones")
+def get_user_phones(db: Session = Depends(get_db)):
+    """Return count + masked phone list for admin preview."""
+    users = db.query(User).filter(User.role != "admin").all()
+    phones = [u.phone for u in users if u.phone and len(u.phone) == 10 and u.phone.isdigit()]
+    masked = [f"+91 {p[:3]}XXXXX{p[-2:]}" for p in phones]
+    return {"count": len(phones), "phones": masked}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

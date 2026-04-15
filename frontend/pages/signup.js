@@ -2,14 +2,11 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import styles from './signup.module.css';
-import navStyles from './index.module.css';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import styles from './signup.module.css';
 import API_URL from '../utils/config';
 
-/**
- * Signup component for user registration
- */
 const Signup = () => {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
@@ -20,7 +17,6 @@ const Signup = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPopup, setShowPopup] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const router = useRouter();
 
@@ -44,14 +40,12 @@ const Signup = () => {
       return;
     }
 
-    let responseStatus = null;
     try {
       const response = await fetch(`${API_URL}/api/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, username, phone, email, password, gender }),
       });
-      responseStatus = response.status;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
@@ -63,155 +57,171 @@ const Signup = () => {
       setShowPopup(true);
     } catch (err) {
       setError(err.message || 'An error occurred. Please try again.');
-      console.error('Signup error:', err, 'Response status:', responseStatus);
     }
   };
 
-  const handlePopupClose = () => {
-    setShowPopup(false);
-    router.push('/login?message=' + encodeURIComponent('Account created successfully!'));
-  };
-
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-    setIsMenuOpen(false);
-  };
+  const fields = [
+    { id: 'name', label: 'Full Name', type: 'text', value: name, setter: setName, placeholder: 'Enter your full name', icon: '👤' },
+    { id: 'username', label: 'Username', type: 'text', value: username, setter: setUsername, placeholder: 'Choose a username', icon: '🆔' },
+    { id: 'phone', label: 'Phone Number', type: 'tel', value: phone, setter: setPhone, placeholder: 'Enter your phone number', icon: '📱' },
+    { id: 'email', label: 'Email', type: 'email', value: email, setter: setEmail, placeholder: 'Enter your email', icon: '✉️' },
+    { id: 'password', label: 'Password', type: 'password', value: password, setter: setPassword, placeholder: 'Create a password', icon: '🔒' }
+  ];
 
   return (
     <div className={styles.container}>
-      {/* Navigation */}
-      <nav className={navStyles.navbar}>
-        <div className={navStyles.navContainer}>
-          <div className={navStyles.navLogo}>
-            <span className={navStyles.logoIcon}>🌱</span>
-            <span>ACMS</span>
+      {/* Left Hero Panel */}
+      <motion.div 
+        className={styles.heroPanel}
+        initial={{ opacity: 0, x: -40 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.8 }}
+      >
+        <div className={styles.heroBadge}>
+          <span className={styles.heroBadgeDot}></span>
+          Join the Global Network
+        </div>
+        <h1 className={styles.heroTitle}>
+          Create Your<br/>
+          <span className={styles.heroTitleAccent}>ACMS Account</span>
+        </h1>
+        <p className={styles.heroSubtitle}>
+          Join the Autonomous Climate Mitigation System network and get access to real-time disaster monitoring, AI predictions, and community response tools.
+        </p>
+        <div className={styles.heroFeatures}>
+          <div className={styles.heroFeature}>
+            <div className={styles.heroFeatureIcon}>🛰️</div>
+            <span>Real-time satellite monitoring & alerts</span>
           </div>
-          <ul className={`${navStyles.navMenu} ${isMenuOpen ? navStyles.active : ''}`}>
-            <li className={navStyles.navItem}>
-              <Link href="/" className={`${navStyles.navLink} ${navStyles.loginBtn}`}>Home</Link>
-            </li>
-
-            <li className={navStyles.navItem}>
-              <Link href="/login" className={`${navStyles.navLink} ${navStyles.loginBtn}`}>Login</Link>
-            </li>
-
-          </ul>
-          <div className={`${navStyles.hamburger} ${isMenuOpen ? navStyles.active : ''}`} onClick={toggleMenu}>
-            <span className={navStyles.bar}></span>
-            <span className={navStyles.bar}></span>
-            <span className={navStyles.bar}></span>
+          <div className={styles.heroFeature}>
+            <div className={styles.heroFeatureIcon}>🧠</div>
+            <span>AI-powered disaster prediction engine</span>
+          </div>
+          <div className={styles.heroFeature}>
+            <div className={styles.heroFeatureIcon}>🤝</div>
+            <span>Community-driven response coordination</span>
+          </div>
+          <div className={styles.heroFeature}>
+            <div className={styles.heroFeatureIcon}>📊</div>
+            <span>Personal impact dashboard & analytics</span>
           </div>
         </div>
-      </nav>
+      </motion.div>
 
-      {/* Main Content */}
-      <div className={styles.parallaxBg}></div>
-      <div className={styles.formContainer}>
-        <h1 className={styles.title}>Sign Up for ACMS</h1>
-        <p className={styles.subtitle}>Join the Autonomous Climate Mitigation System</p>
-        {error && <p className={styles.error}>{error}</p>}
-        {success && !showPopup && <p className={styles.success}>{success}</p>}
-        <form className={styles.form} onSubmit={handleSubmit}>
-          <div className={styles.inputGroup}>
-            <label htmlFor="name" className={styles.label}>Full Name</label>
-            <input
-              type="text"
-              id="name"
-              className={styles.input}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter your full name"
-              required
-            />
-          </div>
-          <div className={styles.inputGroup}>
-            <label htmlFor="username" className={styles.label}>Username</label>
-            <input
-              type="text"
-              id="username"
-              className={styles.input}
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              required
-            />
-          </div>
-          <div className={styles.inputGroup}>
-            <label htmlFor="phone" className={styles.label}>Phone Number</label>
-            <input
-              type="tel"
-              id="phone"
-              className={styles.input}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Enter your phone number"
-              required
-            />
-          </div>
-          <div className={styles.inputGroup}>
-            <label htmlFor="email" className={styles.label}>Email</label>
-            <input
-              type="email"
-              id="email"
-              className={styles.input}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              required
-            />
-          </div>
-          <div className={styles.inputGroup}>
-            <label htmlFor="password" className={styles.label}>Password</label>
-            <input
-              type="password"
-              id="password"
-              className={styles.input}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
-              required
-            />
-          </div>
-          <div className={styles.inputGroup}>
-            <label htmlFor="gender" className={styles.label}>Gender</label>
-            <select
-              id="gender"
-              className={styles.select}
-              value={gender}
-              onChange={(e) => setGender(e.target.value)}
-              required
-            >
-              <option value="" disabled>Select your gender</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`}>
-            Sign Up
-          </button>
-        </form>
-        {showPopup && (
-          <div className={styles.popup}>
-            <div className={styles.popupContent}>
-              <h2>Success</h2>
-              <p>Account created successfully!</p>
-              <button onClick={handlePopupClose} className={`${styles.btn} ${styles.btnPrimary}`}>
-                OK
-              </button>
+      {/* Right Form Panel */}
+      <div className={styles.formPanel}>
+        <motion.div 
+          className={styles.formContainer}
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+        >
+          <h2 className={styles.title}>Personnel Enrollment</h2>
+          <p className={styles.subtitle}>Initialize your system clearance for the Global Mitigation Network</p>
+
+          {error && (
+            <motion.div className={styles.error} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              ⚠️ {error}
+            </motion.div>
+          )}
+
+          {success && !showPopup && (
+            <motion.div className={styles.success} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              ✅ {success}
+            </motion.div>
+          )}
+
+          <form className={styles.form} onSubmit={handleSubmit}>
+            {fields.map((field) => (
+              <motion.div 
+                key={field.id} 
+                className={styles.inputGroup}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+              >
+                <label htmlFor={field.id} className={styles.label}>{field.label}</label>
+                <div className={styles.inputWrapper}>
+                  <span className={styles.inputIcon}>{field.icon}</span>
+                  <input
+                    type={field.type}
+                    id={field.id}
+                    className={styles.input}
+                    value={field.value}
+                    onChange={(e) => field.setter(e.target.value)}
+                    placeholder={field.placeholder}
+                    required
+                  />
+                </div>
+              </motion.div>
+            ))}
+
+            <div className={styles.inputGroup}>
+              <label htmlFor="gender" className={styles.label}>Gender</label>
+              <div className={styles.inputWrapper}>
+                <span className={styles.inputIcon}>⚧</span>
+                <select
+                  id="gender"
+                  className={styles.select}
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  required
+                >
+                  <option value="" disabled>Select your gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
             </div>
-          </div>
-        )}
-        <p className={styles.loginLink}>
-          Already have an account? <Link href="/login" className={styles.link}>Login</Link>
-        </p>
+
+            <motion.button
+              type="submit"
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              Create Account
+            </motion.button>
+          </form>
+
+          <AnimatePresence>
+            {showPopup && (
+              <motion.div 
+                className={styles.popup}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <motion.div 
+                  className={styles.popupContent}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ type: "spring", damping: 15 }}
+                >
+                  <h2 style={{ color: "#10b981", marginBottom: "15px" }}>✅ Success</h2>
+                  <p style={{ color: "#94A3B8", marginBottom: "20px" }}>Account created successfully!</p>
+                  <motion.button
+                    onClick={() => {
+                      setShowPopup(false);
+                      router.push('/login?message=' + encodeURIComponent('Account created successfully!'));
+                    }}
+                    className={`${styles.btn} ${styles.btnPrimary}`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Continue to Login
+                  </motion.button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <p className={styles.loginLink}>
+            Already have an account? <Link href="/login" className={styles.link}>Login</Link>
+          </p>
+        </motion.div>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
 import { ToastContainer, toast } from 'react-toastify';
+import { motion, AnimatePresence } from 'framer-motion';
 import 'react-toastify/dist/ReactToastify.css';
 import styles from './monitoring-agent.module.css';
 import io from 'socket.io-client';
@@ -192,7 +193,7 @@ export default function MonitoringAgent() {
         datasets: [
           {
             data: [metrics.satellites_active, metrics.weather_stations, metrics.datapoints_per_min / 1000],
-            backgroundColor: ['#4caf50', '#ff9800', '#00C4B4'],
+            backgroundColor: ['#4caf50', '#ff9800', '#10B981'],
           },
         ],
       }
@@ -227,12 +228,17 @@ export default function MonitoringAgent() {
       </nav>
 
       {/* Hero Section */}
-      <section className={styles.hero}>
+      <motion.section 
+        className={styles.hero}
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6 }}
+      >
         <h2 className={styles.heroTitle}>AI-Powered System Monitoring</h2>
         <p className={styles.heroText}>
           Monitor system health, data sources, alerts, and predictions in real-time for reliable flood disaster management.
         </p>
-      </section>
+      </motion.section>
 
       {/* System Status */}
       {loading.status ? (
@@ -241,29 +247,44 @@ export default function MonitoringAgent() {
         </div>
       ) : (
         systemStatus && (
-          <section className={styles.section}>
+          <motion.section 
+            className={styles.section}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
             <h3 className={styles.sectionTitle}>System Status</h3>
             <div className={styles.statsGrid}>
-              <div className={styles.statsItem}>
-                <strong>Uptime:</strong> {Math.floor(systemStatus.uptime_seconds / 3600)} hours
-              </div>
-              <div className={styles.statsItem}>
-                <strong>CPU:</strong> {systemStatus.cpu_percent}%
-              </div>
-              <div className={styles.statsItem}>
-                <strong>Memory:</strong> {systemStatus.memory_percent}% ({systemStatus.memory_used_gb}GB used)
-              </div>
-              <div className={styles.statsItem}>
-                <strong>Hostname:</strong> {systemStatus.hostname}
-              </div>
+              {[
+                { label: 'Uptime', value: `${Math.floor(systemStatus.uptime_seconds / 3600)} hours` },
+                { label: 'CPU', value: `${systemStatus.cpu_percent}%` },
+                { label: 'Memory', value: `${systemStatus.memory_percent}% (${systemStatus.memory_used_gb}GB used)` },
+                { label: 'Hostname', value: systemStatus.hostname }
+              ].map((item, i) => (
+                <motion.div 
+                  key={i} 
+                  className={styles.statsItem}
+                  initial={{ opacity: 0, x: -10 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.1 }}
+                  whileHover={{ scale: 1.02 }}
+                >
+                  <strong>{item.label}:</strong> {item.value}
+                </motion.div>
+              ))}
             </div>
-            <div className={styles.chart}>
+            <motion.div 
+              className={styles.chart}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
               <Bar
                 data={statusChartData}
                 options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: 'Resource Usage' } } }}
               />
-            </div>
-          </section>
+            </motion.div>
+          </motion.section>
         )
       )}
 
@@ -274,26 +295,36 @@ export default function MonitoringAgent() {
         </div>
       ) : (
         metrics && (
-          <section className={styles.section}>
+          <motion.section 
+            className={styles.section}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
             <h3 className={styles.sectionTitle}>Environmental Metrics</h3>
             <div className={styles.statsGrid}>
-              <div className={styles.statsItem}>
+              <motion.div className={styles.statsItem} whileHover={{ scale: 1.02 }}>
                 <strong>Satellites Active:</strong> {metrics.satellites_active}
-              </div>
-              <div className={styles.statsItem}>
+              </motion.div>
+              <motion.div className={styles.statsItem} whileHover={{ scale: 1.02 }}>
                 <strong>Weather Stations:</strong> {metrics.weather_stations}
-              </div>
-              <div className={styles.statsItem}>
+              </motion.div>
+              <motion.div className={styles.statsItem} whileHover={{ scale: 1.02 }}>
                 <strong>Data Points/min:</strong> {metrics.datapoints_per_min}
-              </div>
+              </motion.div>
             </div>
-            <div className={styles.chart}>
+            <motion.div 
+              className={styles.chart}
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
               <Doughnut
                 data={metricsChartData}
                 options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: 'Data Sources' } } }}
               />
-            </div>
-          </section>
+            </motion.div>
+          </motion.section>
         )
       )}
 
@@ -304,17 +335,23 @@ export default function MonitoringAgent() {
         </div>
       ) : (
         externalSources && (
-          <section className={styles.section}>
+          <motion.section 
+            className={styles.section}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
             <h3 className={styles.sectionTitle}>External Data Sources</h3>
             <div className={styles.historyContainer}>
               {externalSources.map((source, index) => (
-                <div
+                <motion.div
                   key={index}
                   className={styles.historyItem}
                   style={{
                     backgroundColor:
                       source.status === 'operational' ? '#4caf50' : source.status === 'degraded' ? '#ff9800' : '#f44336',
                   }}
+                  whileHover={{ scale: 1.01 }}
                 >
                   <div className={styles.historyHeader}>
                     <span>
@@ -322,10 +359,10 @@ export default function MonitoringAgent() {
                     </span>
                   </div>
                   <div className={styles.historyDetails}>Latency: {source.latency_ms}ms</div>
-                </div>
+                </motion.div>
               ))}
             </div>
-          </section>
+          </motion.section>
         )
       )}
 
@@ -336,7 +373,12 @@ export default function MonitoringAgent() {
         </div>
       ) : (
         reports && (
-          <section className={styles.section}>
+          <motion.section 
+            className={styles.section}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
             <h3 className={styles.sectionTitle}>Monitoring Reports</h3>
             <div className={styles.statsGrid}>
               <div className={styles.statsItem}>
@@ -346,19 +388,20 @@ export default function MonitoringAgent() {
             <h4 className={styles.sectionSubtitle}>High Risk Predictions by Region</h4>
             <div className={styles.paramsGrid}>
               {Object.entries(reports.high_risk_predictions).map(([region, count]) => (
-                <div key={region} className={styles.paramItem}>
+                <motion.div key={region} className={styles.paramItem} whileHover={{ scale: 1.05 }}>
                   <label className={styles.paramLabel}>{region}</label>
                   <div className={styles.paramValue}>{count}</div>
-                </div>
+                </motion.div>
               ))}
             </div>
             <h4 className={styles.sectionSubtitle}>Latest Flood Predictions</h4>
             <div className={styles.historyContainer}>
               {reports.flood_predictions && reports.flood_predictions.length > 0 ? (
                 reports.flood_predictions.map((pred) => (
-                  <div
+                  <motion.div
                     key={pred.id}
                     className={`${styles.historyItem} ${styles[`${pred.risk_level}Risk`]}`}
+                    whileHover={{ scale: 1.01 }}
                   >
                     <div className={styles.historyHeader}>
                       <span>
@@ -371,13 +414,13 @@ export default function MonitoringAgent() {
                     <div className={styles.historyDetails}>
                       Probability: {(pred.probability * 100).toFixed(1)}% | Water Level: {pred.estimated_water_level}m | River Level: {pred.current_river_level}m
                     </div>
-                  </div>
+                  </motion.div>
                 ))
               ) : (
                 <div className={styles.historyItem}>No recent flood predictions available</div>
               )}
             </div>
-          </section>
+          </motion.section>
         )
       )}
 
@@ -388,17 +431,23 @@ export default function MonitoringAgent() {
         </div>
       ) : (
         alerts.length > 0 && (
-          <section className={styles.section}>
+          <motion.section 
+            className={styles.section}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
             <h3 className={styles.sectionTitle}>Active Alerts</h3>
             <div className={styles.historyContainer}>
               {alerts.map((alert, index) => (
-                <div
+                <motion.div
                   key={index}
                   className={styles.historyItem}
                   style={{
                     backgroundColor:
                       alert.type === 'error' ? '#f44336' : alert.type === 'warning' ? '#ff9800' : '#4caf50',
                   }}
+                  whileHover={{ scale: 1.01 }}
                 >
                   <div className={styles.historyHeader}>
                     <span>{alert.title || alert.message}</span>
@@ -406,10 +455,10 @@ export default function MonitoringAgent() {
                   <div className={styles.historyDetails}>
                     Type: {alert.type} | Time: {new Date(alert.time).toLocaleString()}
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
-          </section>
+          </motion.section>
         )
       )}
 

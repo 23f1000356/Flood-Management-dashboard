@@ -26,7 +26,7 @@ The **Flood Management Dashboard** is an autonomous, AI-driven platform that add
 - **ML-Based Prediction**: XGBoost and LSTM models for accurate flood forecasting
 - **Autonomous Agents**: Intelligent agents for disaster prediction, monitoring, resource allocation, and recovery planning
 - **Centralized Dashboard**: Unified interface for multi-stakeholder collaboration
-- **Automated Alerts**: Real-time notification system for early warning
+- **Automated Alerts**: Real-time email and SMS notification system for early warning via Fast2SMS
 - **Data-Driven Resource Allocation**: Optimal distribution of emergency resources based on risk analysis
 - **Recovery Analytics**: Post-disaster recovery planning and progress tracking
 
@@ -115,6 +115,8 @@ The **Flood Management Dashboard** is an autonomous, AI-driven platform that add
 | **Socket.IO** | 5.10.0 | Real-time communication |
 | **Pillow** | 10.2.0 | Image processing |
 | **Psutil** | 5.9.0 | System monitoring |
+| **httpx** | 0.27.0 | Async HTTP client for SMS API calls |
+| **Fast2SMS** | API | SMS gateway for emergency alerts (India) |
 
 ### Database & Deployment
 
@@ -198,6 +200,9 @@ cd Flood-Management-dashboard
 #### 2. Setup Backend (Python)
 
 ```powershell
+# Navigate to backend directory
+cd backend
+
 # Create virtual environment
 python -m venv .venv
 
@@ -215,23 +220,28 @@ pip install -r requirements.txt
 #### 3. Setup Frontend (Node.js)
 
 ```powershell
+# Navigate to frontend directory
+cd frontend
+
 # Install Node dependencies
 npm install
 ```
 
 #### 4. Environment Configuration (Optional)
 
-Create a `.env.local` file in the root directory:
+Create a `.env.local` file in the `frontend/` directory:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_SOCKET_URL=http://localhost:8000
-DATABASE_URL=sqlite:///./flood_management.db
 ```
 
 #### 5. Run the Backend
 
 ```powershell
+# Make sure you're in the backend directory
+cd backend
+
 # Ensure virtual environment is activated
 python backend.py
 
@@ -245,6 +255,9 @@ Backend will be available at: **http://localhost:8000**
 #### 6. Run the Frontend (New Terminal)
 
 ```powershell
+# Navigate to frontend directory
+cd frontend
+
 # Start development server with Turbopack
 npm run dev
 
@@ -265,6 +278,9 @@ Frontend will be available at: **http://localhost:3000**
 ### Docker Deployment (Optional)
 
 ```bash
+# Navigate to backend directory
+cd backend
+
 # Build Docker image
 docker build -t flood-dashboard .
 
@@ -274,43 +290,250 @@ docker run -p 3000:3000 -p 8000:8000 flood-dashboard
 
 ### Production Deployment (Heroku)
 
-The project includes a `Procfile` for Heroku deployment:
+The project includes a `Procfile` in the backend folder for Heroku deployment:
 
 ```bash
+cd backend
 git push heroku main
 ```
 
 ---
 
+## 📧 Running Celery for Email Alerts
+
+The ACMS platform uses **Celery** with **Redis** as the message broker to send alert emails asynchronously (e.g., on user signup, SOS trigger, damage report submissions).
+
+### Prerequisites
+
+- **Redis** must be installed and running locally.
+
+#### Install Redis on Windows (via WSL or Memurai)
+
+**Option A — WSL (recommended):**
+```bash
+# Inside WSL terminal
+sudo apt update && sudo apt install redis-server -y
+sudo service redis-server start
+```
+
+**Option B — Memurai (native Windows Redis alternative):**
+Download from: https://www.memurai.com/
+
+Verify Redis is running:
+```bash
+redis-cli ping
+# Expected output: PONG
+```
+
+#### Install Redis on macOS
+```bash
+brew install redis
+brew services start redis
+```
+
+---
+
+### Environment Configuration
+
+Make sure your `backend/.env` file has the correct values:
+
+```env
+# SMTP Settings (Gmail example)
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_app_password      # Use Gmail App Password (not your login password)
+MAIL_FROM=your_email@gmail.com
+MAIL_PORT=587
+MAIL_SERVER=smtp.gmail.com
+MAIL_FROM_NAME=ACMS Emergency Alerts
+
+# Redis / Celery Broker
+REDIS_URL=redis://localhost:6379/0
+
+# Fast2SMS (SMS Alerts)
+FAST2SMS_API_KEY=your_fast2sms_api_key_here
+```
+
+> **Gmail App Password**: Go to your Google Account → Security → 2-Step Verification → App Passwords → Create one for "Mail". Use that 16-character password, **not** your Gmail login password.
+
+---
+
+### Install Python Dependencies
+
+```powershell
+cd backend
+pip install celery fastapi-mail redis
+```
+
+Or if you're using `requirements.txt`:
+```powershell
+pip install -r requirements.txt
+```
+
+---
+
+### Start the Celery Worker
+
+Open a **new terminal** (keep the FastAPI backend running in another terminal):
+
+```powershell
+# Navigate to backend directory
+cd backend
+
+# Activate your virtual environment (Windows)
+.\.venv\Scripts\Activate.ps1
+
+# Start Celery worker
+celery -A backend.celery_worker worker --loglevel=info --pool=solo
+```
+
+> **Note**: On Windows, use `--pool=solo` because Celery's default `prefork` pool is not supported. On Linux/macOS, you can omit `--pool=solo`.
+
+You should see output like:
+```
+[config]
+.> app:          backend@hostname
+.> transport:    redis://localhost:6379/0
+.> results:      redis://localhost:6379/0
+.> concurrency:  4 (solo)
+
+[tasks]
+  . send_email_alert_task
+
+[2026-04-16 ...] celery@hostname ready.
+```
+
+---
+
+### Running All Services Together
+
+You need **4 terminals** running simultaneously for full functionality:
+
+| Terminal | Command | Directory |
+|----------|---------|-----------|
+| 1 | `sudo service redis-server start` (WSL) | — |
+| 2 | `python backend.py` | `backend/` |
+| 3 | `celery -A backend.celery_worker worker --loglevel=info --pool=solo` | `backend/` |
+| 4 | `npm run dev` | `frontend/` |
+
+---
+
+### Testing Email Alerts
+
+To verify emails are working, register a new user on the platform. You should:
+1. See the Celery worker terminal print the task being processed
+2. Receive a welcome email at the registered email address
+
+To manually trigger a test task from Python:
+```python
+from backend import send_email_alert_task
+send_email_alert_task.delay(
+    subject="ACMS Test Alert",
+    recipients=["your_email@gmail.com"],
+    body="This is a test email from the ACMS alert system."
+)
+```
+
+---
+
+### Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| `redis.exceptions.ConnectionError` | Redis is not running — start it first |
+| `Authentication error` (SMTP) | Use a Gmail **App Password**, not your login password |
+| `ModuleNotFoundError: celery` | Run `pip install celery fastapi-mail redis` |
+| Celery exits immediately on Windows | Add `--pool=solo` to the worker command |
+| Emails go to spam | Check SPF/DKIM settings or use a transactional email service in production |
+
+---
+
+## 📱 SMS Alerts via Fast2SMS
+
+The ACMS platform uses **Fast2SMS** to send emergency flood alert SMS messages to all registered users when a high-risk event is detected.
+
+### How It Works
+
+When an admin clicks **Send SMS** in the Real-time Monitor dashboard, the backend collects all registered user phone numbers from the database, then makes an API call to Fast2SMS which delivers the emergency SMS to each user's mobile phone through Indian telecom networks.
+
+### Setup
+
+#### 1. Create a Free Account
+- Go to [fast2sms.com](https://www.fast2sms.com) and sign up
+- Navigate to **Dashboard → Dev API** and copy your API key
+
+#### 2. Add Key to Environment
+
+Open `backend/.env` and set:
+```env
+FAST2SMS_API_KEY=your_api_key_here
+```
+
+#### 3. Recharge Your Account
+- Fast2SMS requires a minimum recharge of **₹100** to activate the bulk SMS route
+- Each SMS costs approximately ₹0.25–₹0.50
+
+#### 4. Restart the Backend
+Run your backend app again to load the new `.env` variables.
+
+### SMS Message Format
+
+The system automatically composes region-specific messages based on risk level:
+
+- **HIGH**: `[ACMS EMERGENCY] Flood Alert - Kerala Region. Risk Level: HIGH. Flood Probability: 80%. Evacuate immediately to the nearest shelter. Do not wait. Helpline: 1077. - Disaster Management Authority`
+- **MODERATE**: `[ACMS WARNING] Flood Alert - Assam Region. Risk Level: MODERATE. Stay alert. Avoid low-lying areas and river banks. Helpline: 1077. - Disaster Management Authority`
+- **LOW**: `[ACMS ADVISORY] Flood Alert - West Bengal Region. Risk Level: LOW. Monitor conditions. Follow official instructions. Helpline: 1077. - Disaster Management Authority`
+
+### Testing Without Registered Users
+
+Use the **Test number** field in the SMS Alerts card on the dashboard to send a test SMS to any specific phone number — no registered users required.
+
+### Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| `Fast2SMS API key not configured` | Add `FAST2SMS_API_KEY` to `backend/.env` and restart |
+| `You need to complete 100 INR or more` | Recharge your Fast2SMS account with ₹100 minimum |
+| `No valid 10-digit phone numbers found` | Register users with Indian mobile numbers, or use the Test number field |
+| SMS not received | Ensure phone number is a valid 10-digit Indian number (DND numbers may be blocked) |
+
+
+
 ## 📁 Project Structure
 
 ```
 Flood-Management-Dashboard/
-├── pages/                           # Next.js pages and React components
-│   ├── index.js                    # Landing page
-│   ├── login.js                    # User authentication
-│   ├── signup.js                   # User registration
-│   ├── admin.js                    # Admin panel
-│   ├── adminDashboard.js           # Admin dashboard
-│   ├── UserDashboard.js            # User dashboard
-│   ├── monitoring-agent.js         # Real-time monitoring
-│   ├── disaster-prediction-agent.js# Disaster prediction
-│   ├── resource.js                 # Resource allocation
-│   ├── recovery.js                 # Recovery management
-│   └── Header.js                   # Navigation header
-├── styles/                          # CSS stylesheets
-│   └── globals.css                 # Global styles
-├── utils/                           # Utility functions
-│   └── config.js                   # Configuration
-├── models/                          # ML models directory
-├── backend.py                       # FastAPI backend server
-├── requirements.txt                 # Python dependencies
-├── package.json                     # Node.js dependencies
-├── next.config.js                  # Next.js configuration
-├── Dockerfile                       # Docker configuration
-├── Procfile                         # Heroku deployment
+├── frontend/                        # Next.js frontend application
+│   ├── pages/                      # Next.js pages and React components
+│   │   ├── index.js                # Landing page
+│   │   ├── login.js                # User authentication
+│   │   ├── signup.js               # User registration
+│   │   ├── admin.js                # Admin panel
+│   │   ├── adminDashboard.js       # Admin dashboard
+│   │   ├── UserDashboard.js        # User dashboard
+│   │   ├── monitoring-agent.js     # Real-time monitoring
+│   │   ├── disaster-prediction-agent.js # Disaster prediction
+│   │   ├── resource.js             # Resource allocation
+│   │   ├── recovery.js             # Recovery management
+│   │   └── Header.js               # Navigation header
+│   ├── styles/                     # CSS stylesheets
+│   │   └── globals.css             # Global styles
+│   ├── utils/                      # Utility functions
+│   │   └── config.js               # Configuration
+│   ├── package.json                # Node.js dependencies
+│   ├── package-lock.json           # Dependency lock file
+│   └── next.config.js              # Next.js configuration
+├── backend/                         # FastAPI backend server
+│   ├── backend.py                  # FastAPI main application
+│   ├── requirements.txt            # Python dependencies
+│   ├── models/                     # ML models directory
+│   │   ├── flood_model.pkl         # Trained flood prediction model
+│   │   └── flood_scaler.pkl        # Feature scaler for preprocessing
+│   ├── test_recovery_api.py        # API test suite
+│   ├── acms.db                     # SQLite database
+│   ├── Dockerfile                  # Docker configuration
+│   └── Procfile                    # Heroku deployment
 ├── runtime.txt                      # Python runtime version
-├── tsconfig.json                    # TypeScript configuration
+├── QUICK_REFERENCE.md              # Quick start guide
 └── README.md                        # This file
 ```
 

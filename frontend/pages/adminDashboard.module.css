@@ -1,7 +1,7 @@
 /* Body styles moved to a specific class to avoid global * selector */
 .body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #0f0f23;
+  font-family: 'Outfit', sans-serif;
+  background: #090B0F;
   color: #fff;
   overflow-x: hidden;
 }
@@ -15,7 +15,7 @@
   height: 70px;
   background: rgba(0, 0, 0, 0.95);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.2);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -33,7 +33,7 @@
 .menuToggle {
   background: none;
   border: none;
-  color: #00ff88;
+  color: #10b981;
   font-size: 24px;
   cursor: pointer;
   padding: 10px;
@@ -42,7 +42,7 @@
 }
 
 .menuToggle:hover {
-  background: rgba(0, 255, 136, 0.1);
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .navbarBrand {
@@ -51,7 +51,7 @@
   gap: 10px;
   font-size: 24px;
   font-weight: bold;
-  color: #00ff88;
+  color: #10b981;
 }
 
 .navbarRight {
@@ -62,9 +62,9 @@
 
 .navBtn {
   padding: 8px 16px;
-  background: rgba(0, 255, 136, 0.1);
-  border: 1px solid rgba(0, 255, 136, 0.3);
-  color: #00ff88;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10b981;
   border-radius: 20px;
   text-decoration: none;
   font-size: 14px;
@@ -73,7 +73,7 @@
 }
 
 .navBtn:hover {
-  background: rgba(0, 255, 136, 0.2);
+  background: rgba(16, 185, 129, 0.2);
   transform: translateY(-2px);
 }
 
@@ -94,9 +94,9 @@
   top: 70px;
   width: 280px;
   height: calc(100vh - 70px);
-  background: rgba(15, 15, 35, 0.95);
+  background: #090B0F;
   backdrop-filter: blur(20px);
-  border-right: 1px solid rgba(0, 255, 136, 0.2);
+  border-right: 1px solid rgba(16, 185, 129, 0.2);
   transition: all 0.3s ease;
   z-index: 900;
   overflow-y: auto;
@@ -127,9 +127,9 @@
 
 .menuLink:hover,
 .menuLink.active {
-  background: rgba(0, 255, 136, 0.1);
-  color: #00ff88;
-  border-left-color: #00ff88;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-left-color: #10b981;
 }
 
 .menuIcon {
@@ -185,7 +185,7 @@
 .dashboardTitle {
   font-size: 2.5rem;
   font-weight: 800;
-  background: linear-gradient(45deg, #00ff88, #00d4ff);
+  background: linear-gradient(45deg, #10b981, #00d4ff);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -193,7 +193,7 @@
 
 .refreshBtn {
   padding: 12px 24px;
-  background: linear-gradient(45deg, #00ff88, #00d4ff);
+  background: linear-gradient(45deg, #10b981, #00d4ff);
   border: none;
   color: #000;
   border-radius: 25px;
@@ -204,7 +204,7 @@
 
 .refreshBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
 }
 
 .dashboardGrid {
@@ -215,18 +215,18 @@
 }
 
 .card {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 255, 136, 0.2);
-  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
   padding: 25px;
   transition: all 0.3s ease;
 }
 
 .card:hover {
   transform: translateY(-5px);
-  border-color: #00ff88;
-  box-shadow: 0 15px 30px rgba(0, 255, 136, 0.2);
+  border-color: #10b981;
+  box-shadow: 0 15px 30px rgba(16, 185, 129, 0.2);
 }
 
 .cardHeader {
@@ -239,7 +239,7 @@
 .cardTitle {
   font-size: 1.2rem;
   font-weight: 600;
-  color: #00ff88;
+  color: #10b981;
 }
 
 .cardIcon {
@@ -261,7 +261,7 @@
 }
 
 .online {
-  background: #00ff88;
+  background: #10b981;
 }
 
 .warning {
@@ -301,7 +301,7 @@
 .sectionTitle {
   font-size: 1.8rem;
   margin-bottom: 20px;
-  color: #00ff88;
+  color: #10b981;
 }
 
 .agentsGrid {
@@ -312,7 +312,7 @@
 
 .agentCard {
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(0, 255, 136, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 15px;
   padding: 20px;
   position: relative;
@@ -325,10 +325,10 @@
 }
 
 .clickable:hover {
-  background: rgba(0, 255, 136, 0.1);
-  border-color: rgba(0, 255, 136, 0.4);
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 255, 136, 0.2);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.2);
 }
 
 .agentCard::before {
@@ -338,7 +338,7 @@
   left: -100%;
   width: 100%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, #00ff88, transparent);
+  background: linear-gradient(90deg, transparent, #10b981, transparent);
   animation: scan 3s infinite;
 }
 
@@ -352,7 +352,7 @@
 .agentIcon {
   width: 50px;
   height: 50px;
-  background: linear-gradient(45deg, #00ff88, #00d4ff);
+  background: linear-gradient(45deg, #10b981, #00d4ff);
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -362,7 +362,7 @@
 
 .agentInfo h3 {
   margin-bottom: 5px;
-  color: #00ff88;
+  color: #10b981;
 }
 
 .agentStatus {
@@ -380,14 +380,14 @@
 .miniMetric {
   text-align: center;
   padding: 10px;
-  background: rgba(0, 255, 136, 0.1);
+  background: rgba(16, 185, 129, 0.1);
   border-radius: 8px;
 }
 
 .miniMetricValue {
   font-size: 1.5rem;
   font-weight: bold;
-  color: #00ff88;
+  color: #10b981;
 }
 
 .miniMetricLabel {
